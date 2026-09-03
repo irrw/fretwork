@@ -5,3 +5,5 @@ dist/
 .env.local
 .claude/skills/*/screenshots/*
 !.claude/skills/*/screenshots/.gitkeep
+.vercel
+.env*
