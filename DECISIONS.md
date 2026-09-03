@@ -52,12 +52,11 @@ Settings (instrument, tuning, root, scale, label mode, theme, hidden-scale list,
 
 ### Roadmap: GitHub integration next steps
 
-Done: git repo initialized, first commit made, GitHub repo created (`irrw/fretwork`, public), pushed to `main`, PR build-check workflow (`ci.yml`) in place, repo imported into Vercel and connected (`ireyna-3632s-projects/fretwork`).
+Done: git repo initialized, first commit made, GitHub repo created (`irrw/fretwork`, public), pushed to `main`, PR build-check workflow (`ci.yml`) in place, repo imported into Vercel and connected (`ireyna-3632s-projects/fretwork`), branch protection on `main` enabled (PR required, `ci.yml` check required, enforced for admins too — trying it on for size before deciding whether to keep it).
 
 Remaining:
 
-1. **Branch protection on `main`** — require the `ci.yml` build check to pass before merge. Low cost, matches the "single repo, `main` = production, feature branches for changes" shape already decided above.
-2. **Still explicitly out of scope for now**: anything beyond build-on-PR + Vercel's deploy-on-push/preview-on-PR. Don't add more CI/CD speculatively.
+1. **Still explicitly out of scope for now**: anything beyond build-on-PR + Vercel's deploy-on-push/preview-on-PR. Don't add more CI/CD speculatively.
 
 ## Follow-ups / known gaps
 
