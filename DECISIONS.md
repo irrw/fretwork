@@ -1,0 +1,70 @@
+# Fretwork — Decision History
+
+A record of what got built, why, and the priorities driving it. Written for future-us (or anyone forking this) to understand intent, not just implementation.
+
+## Core intent
+
+Fretwork is a mobile-first scale/fingering visualizer for fretted instruments. Two priorities have overridden almost every other design decision since day one:
+
+1. **Maximum screen real estate for the fretboard itself.** The diagram is the product; everything else — instrument, tuning, root, scale, labels — is secondary chrome that should take up as little permanent space as possible.
+2. **Minimal, progressively-revealed UI.** Controls stay hidden until tapped rather than sitting visible at all times. Several rounds of this app's history are literally "remove the header," "collapse this into fewer taps," "stop this from needing to scroll."
+
+Non-goal, stated explicitly: this is not trying to out-feature the existing market of scale/fretboard apps, which is already saturated. Value is for the primary user and a small circle of similarly-minded players (see Distribution below), not for maximizing install numbers.
+
+## Product decisions, in rough order
+
+- **Orientation**: fretboard renders as the player's own top-down view (looking down at your own neck while playing) — nut at top, frets increasing downward, vertical scroll — not the mirrored "sitting across from the guitarist" view common in chord-chart apps. Strings run low-to-high left-to-right.
+- **Note tokens**: filled circle = root (accent color), outlined circle filled with page background = other in-scale note, nothing rendered = not in scale. Open strings not in the scale still show a bare letter (no ring) so the string's identity is never fully hidden.
+- **Theme**: dark (ebony/brass, evoking the instrument's own wood and hardware) is default, with a light "parchment" theme as an explicit toggle, not a system-preference auto-switch.
+- **Box positions**: went through several iterations before landing on the current model.
+  - First attempt: algorithmically *suggested* box positions by clustering the frets where the root note lands across all strings (root-note density as a proxy for "natural hand position").
+  - Rejected in favor of full manual control: **two-tap selection** — first tap drops an anchor, every other fret number becomes an obvious white "pick width" button, second tap sets the box's actual width. No fixed span. This gives the user full control over playable box shapes (matters for scales like harmonic/melodic minor with an augmented-2nd interval that a fixed 4-fret box can clip).
+  - Outside the active box, "Fingers" label mode falls back to showing scale degrees instead — fingering numbers are meaningless without a chosen hand position, degrees aren't.
+- **Double-stop overlay**: diatonic 3rds/6ths only, computed live from the interval data (not hardcoded per scale), scoped to the active box only to avoid neck-wide visual noise. Built after "how do we surface double stops" was explicitly asked as an open design question and three concrete directions were compared before picking this one.
+- **Customizable scale list**: default visible set is curated (not all 12 modes/scales shown at once); anything else is reachable via an explicit edit mode (pencil icon → hide/restore chips) plus a "preview chip" affordance — 1–2 hidden scales always peek into the visible row so the existence of more options is discoverable without a manual.
+- **Label-mode toggle**: originally a single text chip ("Notes"/"Degrees"/"Fingers"). Identified as a discoverability failure — the word had no visual relationship to what's actually drawn on the neck, and "Degrees" vs. "Fingers" were both just numbers with no way to tell them apart at a glance. Replaced with a three-dot mini legend: a literal note-letter token, a degree token shown *with an accidental* (so it can't be confused with a bare finger number), and a fingerprint icon for finger mode. Tapping any dot jumps straight to that mode.
+- **Bottom bar consolidation**: repeatedly compressed as the control count grew. Root+Scale merged into one "Key" chip; Instrument+Tuning+Theme+Double-Stops merged into a single overflow ("•••") sheet — reasoning being that instrument/tuning is a *session-level* choice a player sets once and rarely touches, while root/scale changes constantly during practice. The two shouldn't compete for the same row.
+- **Mandolin as default instrument** (this round): the project's actual primary user plays mandolin/bluegrass, not guitar. Guitar was the original scaffolding default from early prototyping; mandolin is now what loads first for all users.
+- **Dorian restored to default visible scales** (this round): initially cut for being "impractical" for straight bluegrass repertoire, but old-time/modal fiddle tunes (e.g. "Shady Grove") do lean Dorian/Mixolydian, so it's back in the curated default set rather than requiring a manual restore.
+- **File consolidation**: the project briefly forked into `_stable` / `_v2` / `_boxes_experiment` variants during exploration. Confirmed via diff that the experiment branch was a strict superset and collapsed everything back to one canonical `fretwork.jsx`. Lesson carried forward: prefer git branches over filename-suffix forks once this is a real repo — branches are the tool this pattern was standing in for.
+- **Mandolin's fifths tuning**: worth noting for later — mandolin's uniform perfect-fifths tuning (G-D-A-E) makes adjacent-string interval shapes identical across every string pair, unlike guitar's mixed fourths-plus-a-third tuning. That symmetry isn't exploited anywhere in the code today (the box-suggestion heuristic that would have used it was replaced by manual selection), but if algorithmic box-position suggestions ever come back, mandolin is the instrument where a single computed shape could be mechanically transposed across strings instead of re-derived per pair.
+
+## Persistence
+
+Settings (instrument, tuning, root, scale, label mode, theme, hidden-scale list, double-stop mode) persist via `localStorage` under a single versioned key (`fretwork.prefs.v1`). All reads/writes are try/catch-wrapped and fail silently — `localStorage` is unavailable inside the Claude.ai artifact sandbox this was prototyped in, so persistence simply no-ops there; it activates for real once deployed to actual static hosting.
+
+## Distribution & business context
+
+- **No commercial ambition.** The scale/fretboard-visualizer space is already saturated; there isn't a market gap worth chasing here. Value is personal-plus-community, not growth.
+- **Open source, static hosting.** No backend, no database — a static build costs nothing to host at this project's realistic traffic (a few hundred KB per load; even the most conservative free tier's bandwidth cap implies well over 100,000 loads/month before it'd matter).
+- **Host decision (tentative): GitHub Pages or Cloudflare Pages.** Cloudflare Pages has no bandwidth ceiling at all on its free tier, which matters more as a safety net than as a day-one requirement — GitHub Pages' soft 100GB/month cap is effectively irrelevant at this project's scale either way. Final pick TBD.
+- **Distribution model: word of mouth within the actual community**, not app-store/SEO-driven growth — mandolin/bluegrass forums, subreddits, in-person jams. Matches the scale of the intended audience; general-audience discovery mechanisms would be solving a problem this project doesn't have.
+- **PWA install path** ("Add to Home Screen") is the answer to cross-platform friction (iOS sideloading is effectively blocked; Android APK distribution isn't universal) — installable from the same static site with no app-store review process on either platform.
+
+## CI/CD plan
+
+- **Claude.ai chat** (this environment) has no persistent storage and no network egress — it can produce files but cannot push them anywhere. It's the design/iteration surface, not the shipping mechanism.
+- **Claude Code** (CLI/desktop, run locally with real filesystem + git/gh credentials) is the tool that actually commits, pushes, and opens PRs. The intended loop: iterate here → hand finished code to Claude Code → it pushes to a branch → PR → merge.
+- **Repo shape**: single repo, `main` = production. Feature branches replace the old filename-suffix forking pattern (see File consolidation above).
+- **Pipeline**: one GitHub Actions workflow, triggered on push to `main` — install deps, build, deploy the build output to Pages via `actions/deploy-pages`. That's the entire CI (build-on-push) and CD (auto-publish-on-success) story; nothing more elaborate is warranted at this scale.
+- **Explicitly deferred**: per-branch preview URLs (a Cloudflare Pages strength GitHub Pages doesn't do natively) — worth revisiting only if/when reviewing changes via code diff alone stops being sufficient.
+
+### Roadmap: GitHub integration next steps
+
+Current state: local working tree only, not yet a git repository, no remote. `gh` is authenticated locally. In order:
+
+1. **`git init` + first commit.** Straightforward once we decide what "done" looks like for the first commit — probably everything as of the tooltip/scaling work, so history starts from a working app rather than from scaffolding-only.
+2. **Create the GitHub repo.** `gh repo create` — needs a decision on **public vs. private** first (public aligns with the "open source" stance in Distribution & business context above, but that's a call for whoever owns the account, not an automatic default) and on the repo name/visibility before it's created, since that's a visible, hard-to-fully-undo action.
+3. **Push `main`, verify the Actions workflow runs.** First push will trigger `.github/workflows/deploy.yml`; watch the Actions tab for the first real run rather than assuming it works from a local `npm run build` alone (CI installs from `package-lock.json` in a clean environment, which can surface issues a local `node_modules` masks).
+4. **Enable Pages with the correct source.** Settings → Pages → Source: **GitHub Actions** (see the README fix above — this was previously documented wrong as "Deploy from a branch / gh-pages").
+5. **Add a PR-triggered build check, separate from the deploy workflow.** Today's workflow only triggers `on: push: branches: [main]` — a broken build on a feature branch or PR isn't caught until (or unless) it's merged. A second, lightweight workflow (or an added trigger) that runs `npm ci && npm run build` `on: pull_request` would catch that before merge, without touching deploy at all.
+6. **Branch protection on `main`** once the PR build check exists — require it to pass before merge. Low cost, matches the "single repo, `main` = production, feature branches for changes" shape already decided above.
+7. **Still explicitly out of scope for now** (from the section above): per-branch preview URLs, and anything beyond build-on-push + deploy-on-success. Don't add these speculatively; revisit only when reviewing a diff stops being enough.
+
+## Follow-ups / known gaps
+
+- **Desktop fretboard sizing (fixed, this round)**: the fretboard was pixel-sized for mobile and looked tiny on tall desktop viewports. It now scales up (via a `ResizeObserver`-driven CSS transform, floored at 1x) to fill available vertical space; mobile layout is unaffected since the scale never drops below 1.
+- **Desktop bottom bar is under-designed (open)**: the bottom control bar (Key chip, label-mode legend, ••• overflow sheet) was built entirely around mobile tap targets and thumb reach. On desktop it still works but doesn't take advantage of the extra space, pointer precision, or hover affordances — e.g. the overflow sheet exists mainly to save space that desktop actually has, and there's no keyboard/hover interaction model. Two concrete sub-issues to resolve in a later round:
+  1. **Width/position on desktop.** The bar spans full viewport width and stays pinned to the bottom at every breakpoint, unchanged from mobile. On a wide window this strands related controls at opposite edges (Key chip far left, ••• far right) with a large dead gap between them. Worth first asking whether a bottom-pinned bar is the right pattern for desktop at all — vs. e.g. a compact top toolbar — before just capping its width and centering it.
+  2. **Panel z-axis.** Opening the Key or ••• panel currently shrinks the fretboard's `flex: 1` scroll area (which re-triggers the `fitScale` recompute, reflowing the whole neck) instead of floating the panel as an overlay above the fretboard. Overlaying it (fixed/absolute-positioned, above the neck in z-index, reusing the backdrop-dismiss behavior that already exists) would avoid that reflow entirely.
+- **Tooltip: close the two-tap loop (open)**: the onboarding tooltip only explains step 1 ("tap a fret to start a box") and disappears the instant the user taps any fret — before they've necessarily learned step 2 ("tap another fret to set its width"). Consider chaining it: when the first tap sets the anchor and enters sizing mode, dismiss the original tooltip and immediately show a second, one-time tooltip pointing at a different fret ("tap here to set the width"), teaching the full two-tap gesture instead of half of it. The second tooltip should respect the same persisted don't-show-again preference as the first (one flag for the whole onboarding sequence) rather than becoming an independent nag with its own toggle.
