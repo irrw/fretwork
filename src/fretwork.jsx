@@ -289,7 +289,7 @@ export default function Fretwork() {
         background: c.bg,
         color: c.text,
         fontFamily: "'IBM Plex Sans', sans-serif",
-        height: "100vh",
+        height: "100dvh",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
