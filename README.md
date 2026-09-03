@@ -34,12 +34,7 @@ The output is in the `dist/` folder, ready for deployment.
 
 ## Deployment
 
-This repo is set up to deploy via [Vercel](https://vercel.com/): once the GitHub repo is imported as a Vercel project, it deploys `main` to production on every push and builds a preview URL for every pull request automatically — no workflow config needed on this side.
-
-To connect it:
-1. [vercel.com/new](https://vercel.com/new) → Import Git Repository → select `irrw/fretwork`
-2. Framework preset: **Vite** (should auto-detect). Build command `npm run build`, output directory `dist` (defaults should already match)
-3. Deploy — subsequent pushes to `main` and PRs deploy automatically from then on
+This repo is connected to [Vercel](https://vercel.com/): it deploys `main` to production on every push and builds a preview URL for every pull request automatically — no workflow config needed on this side.
 
 A separate GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm run build` on every PR as an independent build check.
 
