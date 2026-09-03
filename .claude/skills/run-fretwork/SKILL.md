@@ -31,7 +31,7 @@ The user keeps this dev server running persistently in their own terminal to wat
 1. **Check whether it's already up before starting one.** A previous session's server (or the user's own) is very likely still running on the pinned port (5180, set in `vite.config.js` via `server.port` + `strictPort: true`):
 
 ```bash
-curl -sf --max-time 2 http://localhost:5180/fretwork/ >/dev/null 2>&1 && echo "already running" || echo "not running"
+curl -sf --max-time 2 http://localhost:5180/ >/dev/null 2>&1 && echo "already running" || echo "not running"
 ```
 
 If it's already running, skip straight to driving it — do **not** start a second one (it would just fail on the pinned port anyway, since `strictPort: true` refuses to fall back to another port).
@@ -41,17 +41,15 @@ Only if it's not running, start it in the background and poll (don't `sleep`) un
 ```bash
 npm run dev > /tmp/fretwork-dev.log 2>&1 &
 disown
-timeout 30 bash -c 'until curl -sf --max-time 2 http://localhost:5180/fretwork/ >/dev/null 2>&1; do sleep 1; done'
+timeout 30 bash -c 'until curl -sf --max-time 2 http://localhost:5180/ >/dev/null 2>&1; do sleep 1; done'
 ```
-
-Note the trailing slash and `/fretwork/` path — the app is served under that base path (`vite.config.js` `base: '/fretwork/'`), not at the bare root.
 
 2. Drive it with the REPL driver, piping commands via a heredoc:
 
 ```bash
 node .claude/skills/run-fretwork/driver.mjs <<'EOF'
 viewport 1600 1200
-nav http://localhost:5180/fretwork/
+nav http://localhost:5180/
 wait-for text=Major
 screenshot desktop.png
 scroll-bounds [data-testid=fretboard-scroll]
@@ -59,7 +57,7 @@ scroll [data-testid=fretboard-scroll] 2000
 scroll-bounds [data-testid=fretboard-scroll]
 screenshot desktop-scrolled.png
 viewport 375 667
-nav http://localhost:5180/fretwork/
+nav http://localhost:5180/
 wait-for text=Major
 screenshot mobile.png
 scroll [data-testid=fretboard-scroll] 2000
@@ -103,7 +101,7 @@ Avoid `pkill -f vite` or similar broad patterns — this machine may have other 
 ## Run (human path)
 
 ```bash
-npm run dev   # opens on http://localhost:5180/fretwork/, Ctrl-C to stop
+npm run dev   # opens on http://localhost:5180/, Ctrl-C to stop
 ```
 
 ## Test
@@ -118,7 +116,6 @@ npm run build
 
 ## Gotchas
 
-- **The app's base path is `/fretwork/`, not `/`.** Because `vite.config.js` sets `base: '/fretwork/'` (for GitHub Pages deployment), both `npm run dev` and `npm run build` serve/reference that path. Hitting `http://localhost:5180/` bare returns a 404 — always include the trailing `/fretwork/`.
 - **The fretboard's vertical scale is viewport-height-dependent by design** (a `ResizeObserver`-driven CSS transform fills tall viewports, floored at 1x so short/mobile viewports are unaffected). If you're screenshotting to verify a layout change, use two contrasting viewport heights (e.g. `375x667` and `1600x1200`) — testing only one size can hide a regression in the other.
 - **A naive readline `pause()`/`resume()` REPL loop doesn't serialize a heredoc's buffered lines** — Node's readline can emit several already-buffered `line` events before an async handler's `pause()` call takes effect, causing commands to run out of order (and a `resume()`-after-`close()` crash on the final command). The driver instead collects all lines up front, then `await`s them one at a time in a plain `for` loop.
 - **`npx playwright install --with-deps` fails here** — it shells out to `sudo apt-get`, and there's no password/TTY for sudo in this environment. Skip `--with-deps`; the plain browser download runs fine without extra system packages.
@@ -130,4 +127,4 @@ npm run build
 ## Troubleshooting
 
 - **`Error: net::ERR_CONNECTION_REFUSED` on `nav`**: the dev server isn't up yet or died. Check `/tmp/fretwork-dev.log` and re-run the `curl` poll from step 1 before driving.
-- **`npm run dev` exits immediately with `Port 5180 is in use`**: expected and fine if the `curl` check in step 1 already found it running — that's the persistent server you should just drive, not restart. Only treat this as a real conflict (something holding the port that *isn't* fretwork) if the `curl` check to `/fretwork/` failed first; in that case `lsof -ti:5180 -sTCP:LISTEN` to identify it before deciding whether to kill it.
+- **`npm run dev` exits immediately with `Port 5180 is in use`**: expected and fine if the `curl` check in step 1 already found it running — that's the persistent server you should just drive, not restart. Only treat this as a real conflict (something holding the port that *isn't* fretwork) if the `curl` check failed first; in that case `lsof -ti:5180 -sTCP:LISTEN` to identify it before deciding whether to kill it.

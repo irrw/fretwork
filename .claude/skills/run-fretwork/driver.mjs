@@ -22,7 +22,7 @@
 // Example:
 //   node driver.mjs <<'EOF'
 //   viewport 1600 1200
-//   nav http://localhost:5180/fretwork/
+//   nav http://localhost:5180/
 //   wait-for text=Major
 //   screenshot desktop.png
 //   console --errors

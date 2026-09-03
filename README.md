@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5180/fretwork/ in your browser (port is pinned in `vite.config.js`; note the `/fretwork/` base path).
+Then open http://localhost:5180/ in your browser (port is pinned in `vite.config.js`).
 
 ## Building for production
 
