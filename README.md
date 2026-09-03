@@ -34,12 +34,14 @@ The output is in the `dist/` folder, ready for deployment.
 
 ## Deployment
 
-This repo is configured to automatically deploy to GitHub Pages on every push to `main`. The GitHub Actions workflow in `.github/workflows/deploy.yml` handles building and deploying.
+This repo is set up to deploy via [Vercel](https://vercel.com/): once the GitHub repo is imported as a Vercel project, it deploys `main` to production on every push and builds a preview URL for every pull request automatically — no workflow config needed on this side.
 
-To enable Pages deployments:
-1. Go to repo Settings → Pages
-2. Source: **GitHub Actions** (not "Deploy from a branch" — the workflow uploads a build artifact directly via `actions/deploy-pages`, there's no `gh-pages` branch involved)
-3. Push to `main` (or run the workflow manually) to trigger the first deploy
+To connect it:
+1. [vercel.com/new](https://vercel.com/new) → Import Git Repository → select `irrw/fretwork`
+2. Framework preset: **Vite** (should auto-detect). Build command `npm run build`, output directory `dist` (defaults should already match)
+3. Deploy — subsequent pushes to `main` and PRs deploy automatically from then on
+
+A separate GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm run build` on every PR as an independent build check.
 
 ## Architecture
 

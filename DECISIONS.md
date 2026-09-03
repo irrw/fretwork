@@ -37,7 +37,7 @@ Settings (instrument, tuning, root, scale, label mode, theme, hidden-scale list,
 
 - **No commercial ambition.** The scale/fretboard-visualizer space is already saturated; there isn't a market gap worth chasing here. Value is personal-plus-community, not growth.
 - **Open source, static hosting.** No backend, no database — a static build costs nothing to host at this project's realistic traffic (a few hundred KB per load; even the most conservative free tier's bandwidth cap implies well over 100,000 loads/month before it'd matter).
-- **Host decision (tentative): GitHub Pages or Cloudflare Pages.** Cloudflare Pages has no bandwidth ceiling at all on its free tier, which matters more as a safety net than as a day-one requirement — GitHub Pages' soft 100GB/month cap is effectively irrelevant at this project's scale either way. Final pick TBD.
+- **Host decision (final): Vercel.** Chosen over GitHub Pages / Cloudflare Pages because its GitHub integration gives per-PR preview deploys out of the box — no custom workflow needed for that, and it was previously listed below as explicitly deferred. Free Hobby tier fits this project's no-commercial-ambition, low-traffic profile.
 - **Distribution model: word of mouth within the actual community**, not app-store/SEO-driven growth — mandolin/bluegrass forums, subreddits, in-person jams. Matches the scale of the intended audience; general-audience discovery mechanisms would be solving a problem this project doesn't have.
 - **PWA install path** ("Add to Home Screen") is the answer to cross-platform friction (iOS sideloading is effectively blocked; Android APK distribution isn't universal) — installable from the same static site with no app-store review process on either platform.
 
@@ -46,20 +46,19 @@ Settings (instrument, tuning, root, scale, label mode, theme, hidden-scale list,
 - **Claude.ai chat** (this environment) has no persistent storage and no network egress — it can produce files but cannot push them anywhere. It's the design/iteration surface, not the shipping mechanism.
 - **Claude Code** (CLI/desktop, run locally with real filesystem + git/gh credentials) is the tool that actually commits, pushes, and opens PRs. The intended loop: iterate here → hand finished code to Claude Code → it pushes to a branch → PR → merge.
 - **Repo shape**: single repo, `main` = production. Feature branches replace the old filename-suffix forking pattern (see File consolidation above).
-- **Pipeline**: one GitHub Actions workflow, triggered on push to `main` — install deps, build, deploy the build output to Pages via `actions/deploy-pages`. That's the entire CI (build-on-push) and CD (auto-publish-on-success) story; nothing more elaborate is warranted at this scale.
-- **Explicitly deferred**: per-branch preview URLs (a Cloudflare Pages strength GitHub Pages doesn't do natively) — worth revisiting only if/when reviewing changes via code diff alone stops being sufficient.
+- **Deploy pipeline: Vercel**, imported directly from the GitHub repo (once connected: pushes to `main` deploy to production, every PR gets its own preview URL automatically). No custom GitHub Actions workflow needed for this — Vercel's GitHub integration handles build + deploy on its own.
+- **CI pipeline: GitHub Actions** (`.github/workflows/ci.yml`), triggered `on: pull_request` — runs `npm ci && npm run build` as an independent build check, separate from Vercel's own build.
+- **No longer deferred**: per-branch preview URLs — solved by moving to Vercel (see Distribution & business context above).
 
 ### Roadmap: GitHub integration next steps
 
-Current state: local working tree only, not yet a git repository, no remote. `gh` is authenticated locally. In order:
+Done: git repo initialized, first commit made, GitHub repo created (`irrw/fretwork`, public), pushed to `main`, PR build-check workflow (`ci.yml`) in place.
 
-1. **`git init` + first commit.** Straightforward once we decide what "done" looks like for the first commit — probably everything as of the tooltip/scaling work, so history starts from a working app rather than from scaffolding-only.
-2. **Create the GitHub repo.** `gh repo create` — needs a decision on **public vs. private** first (public aligns with the "open source" stance in Distribution & business context above, but that's a call for whoever owns the account, not an automatic default) and on the repo name/visibility before it's created, since that's a visible, hard-to-fully-undo action.
-3. **Push `main`, verify the Actions workflow runs.** First push will trigger `.github/workflows/deploy.yml`; watch the Actions tab for the first real run rather than assuming it works from a local `npm run build` alone (CI installs from `package-lock.json` in a clean environment, which can surface issues a local `node_modules` masks).
-4. **Enable Pages with the correct source.** Settings → Pages → Source: **GitHub Actions** (see the README fix above — this was previously documented wrong as "Deploy from a branch / gh-pages").
-5. **Add a PR-triggered build check, separate from the deploy workflow.** Today's workflow only triggers `on: push: branches: [main]` — a broken build on a feature branch or PR isn't caught until (or unless) it's merged. A second, lightweight workflow (or an added trigger) that runs `npm ci && npm run build` `on: pull_request` would catch that before merge, without touching deploy at all.
-6. **Branch protection on `main`** once the PR build check exists — require it to pass before merge. Low cost, matches the "single repo, `main` = production, feature branches for changes" shape already decided above.
-7. **Still explicitly out of scope for now** (from the section above): per-branch preview URLs, and anything beyond build-on-push + deploy-on-success. Don't add these speculatively; revisit only when reviewing a diff stops being enough.
+Remaining:
+
+1. **Import the repo into Vercel** (see README Deployment section) — not yet connected as of this writing.
+2. **Branch protection on `main`** — require the `ci.yml` build check to pass before merge. Low cost, matches the "single repo, `main` = production, feature branches for changes" shape already decided above.
+3. **Still explicitly out of scope for now**: anything beyond build-on-PR + Vercel's deploy-on-push/preview-on-PR. Don't add more CI/CD speculatively.
 
 ## Follow-ups / known gaps
 
