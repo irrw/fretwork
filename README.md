@@ -38,6 +38,25 @@ This repo is connected to [Vercel](https://vercel.com/): it deploys `main` to pr
 
 A separate GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm run build` on every PR as an independent build check.
 
+## Making changes
+
+`main` is protected — direct pushes are rejected, changes go through a branch + PR:
+
+```bash
+git checkout -b your-branch-name
+# make changes, commit
+git push -u origin your-branch-name
+gh pr create
+```
+
+Opening the PR triggers two automatic checks: the `ci.yml` build check (must pass before merge is allowed) and a Vercel preview deploy (a live URL for that branch — useful for checking on an actual phone before it's live). Once the build check is green:
+
+```bash
+gh pr merge --squash --delete-branch
+```
+
+Merging to `main` auto-deploys to production via Vercel within a minute or two — no manual deploy step.
+
 ## Architecture
 
 See `DECISIONS.md` for product decisions, intent, and design rationale.
