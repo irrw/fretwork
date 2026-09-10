@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal } from "lucide-react";
-import logoMarkUrl from "./assets/icons/mandolin-headstock/mandolin-headstock-mark.svg";
+import logoMarkUrl from "./assets/icons/fretwork-icon/fretwork-mark.svg";
 
 // ---------- Music data ----------
 const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
