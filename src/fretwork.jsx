@@ -25,6 +25,10 @@ const LABEL_MODES = [
   { key: "degree", label: "Interval", icon: Ruler },
   { key: "finger", label: "Finger position", icon: Fingerprint },
 ];
+// Finger position is experimental (see EXPERIMENTAL section in the ellipsis
+// menu) and deliberately left out of the primary Labels menu until its
+// per-instrument fingering logic is correct.
+const PRIMARY_LABEL_MODES = LABEL_MODES.filter((m) => m.key !== "finger");
 
 const INSTRUMENTS = {
   guitar: {
@@ -870,7 +874,7 @@ export default function Fretwork() {
                 LABELS
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {LABEL_MODES.map((m) => {
+                {PRIMARY_LABEL_MODES.map((m) => {
                   const Icon = m.icon;
                   const isActive = m.key === labelMode;
                   return (
@@ -990,6 +994,36 @@ export default function Fretwork() {
               >
                 {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
                 {theme === "dark" ? "Dark" : "Light"}
+              </button>
+
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: "0.08em",
+                  color: c.muted,
+                  margin: "14px 0 8px",
+                }}
+              >
+                EXPERIMENTAL
+              </div>
+              <button
+                onClick={() => setLabelMode((m) => (m === "finger" ? "note" : "finger"))}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 20,
+                  border: `1px solid ${labelMode === "finger" ? c.root : c.panelEdge}`,
+                  background: labelMode === "finger" ? "rgba(201,151,59,0.12)" : "transparent",
+                  color: labelMode === "finger" ? c.root : c.text,
+                  fontSize: 13,
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                }}
+              >
+                <Fingerprint size={14} />
+                Finger position (beta)
               </button>
             </div>
           )}
