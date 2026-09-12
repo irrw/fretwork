@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal } from "lucide-react";
+import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal, Music2, Ruler } from "lucide-react";
 import logoMarkUrl from "./assets/icons/fretwork-icon/fretwork-mark.svg";
 
 // ---------- Music data ----------
@@ -19,6 +19,16 @@ const SCALES = {
   "Harmonic Minor": { intervals: [0, 2, 3, 5, 7, 8, 11], degrees: ["1", "2", "b3", "4", "5", "b6", "7"] },
   "Melodic Minor": { intervals: [0, 2, 3, 5, 7, 9, 11], degrees: ["1", "2", "b3", "4", "5", "6", "7"] },
 };
+
+const LABEL_MODES = [
+  { key: "note", label: "Notes", icon: Music2 },
+  { key: "degree", label: "Interval", icon: Ruler },
+  { key: "finger", label: "Finger position", icon: Fingerprint },
+];
+// Finger position is experimental (see EXPERIMENTAL section in the ellipsis
+// menu) and deliberately left out of the primary Labels menu until its
+// per-instrument fingering logic is correct.
+const PRIMARY_LABEL_MODES = LABEL_MODES.filter((m) => m.key !== "finger");
 
 const INSTRUMENTS = {
   guitar: {
@@ -125,7 +135,7 @@ export default function Fretwork() {
   const [root, setRoot] = useState(savedPrefs.root ?? "C");
   const [scaleName, setScaleName] = useState(savedPrefs.scaleName ?? "Major");
   const [labelMode, setLabelMode] = useState(savedPrefs.labelMode ?? "note"); // note | degree | finger
-  const [panel, setPanel] = useState(null);
+  const [panel, setPanel] = useState(null); // null | "key" | "more" | "labels"
   const [theme, setTheme] = useState(savedPrefs.theme ?? "dark");
   const [selectionStart, setSelectionStart] = useState(null); // anchor fret while sizing
   const [activeBox, setActiveBox] = useState(null); // { start, end } or null
@@ -555,6 +565,7 @@ export default function Fretwork() {
                       isRoot={NOTES.indexOf(note) === rootIdx}
                       colors={c}
                       activeBox={activeBox}
+                      instrumentKey={instrumentKey}
                     />
                   </div>
                 );
@@ -632,6 +643,7 @@ export default function Fretwork() {
                           isRoot={NOTES.indexOf(note) === rootIdx}
                           colors={c}
                           activeBox={activeBox}
+                          instrumentKey={instrumentKey}
                         />
                       </div>
                     );
@@ -850,6 +862,55 @@ export default function Fretwork() {
             </div>
           )}
 
+          {panel === "labels" && (
+            <div>
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: "0.08em",
+                  color: c.muted,
+                  marginBottom: 8,
+                }}
+              >
+                LABELS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {PRIMARY_LABEL_MODES.map((m) => {
+                  const Icon = m.icon;
+                  const isActive = m.key === labelMode;
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => {
+                        setLabelMode(m.key);
+                        setPanel(null);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: `1px solid ${isActive ? c.root : c.panelEdge}`,
+                        background: isActive ? "rgba(201,151,59,0.12)" : "transparent",
+                        color: isActive ? c.root : c.text,
+                        fontSize: 14,
+                        fontFamily: "'IBM Plex Sans', sans-serif",
+                        textAlign: "left",
+                      }}
+                    >
+                      <Icon size={16} />
+                      <span style={{ flex: 1 }}>{m.label}</span>
+                      {isActive && <Check size={16} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {panel === "more" && (
             <div>
               <div
@@ -936,6 +997,36 @@ export default function Fretwork() {
                 {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
                 {theme === "dark" ? "Dark" : "Light"}
               </button>
+
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: "0.08em",
+                  color: c.muted,
+                  margin: "14px 0 8px",
+                }}
+              >
+                EXPERIMENTAL
+              </div>
+              <button
+                onClick={() => setLabelMode((m) => (m === "finger" ? "note" : "finger"))}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 20,
+                  border: `1px solid ${labelMode === "finger" ? c.root : c.panelEdge}`,
+                  background: labelMode === "finger" ? "rgba(201,151,59,0.12)" : "transparent",
+                  color: labelMode === "finger" ? c.root : c.text,
+                  fontSize: 13,
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                }}
+              >
+                <Fingerprint size={14} />
+                Finger position (beta)
+              </button>
             </div>
           )}
         </div>
@@ -989,7 +1080,7 @@ export default function Fretwork() {
             colors={c}
           />
           <div style={{ flex: 1 }} />
-          <LabelModeLegend labelMode={labelMode} setLabelMode={setLabelMode} colors={c} />
+          <LabelModeButton labelMode={labelMode} active={panel === "labels"} onClick={() => togglePanel("labels")} colors={c} />
           <button
             onClick={() => togglePanel("more")}
             aria-label="More settings"
@@ -1015,7 +1106,33 @@ export default function Fretwork() {
   );
 }
 
-function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox }) {
+// Finger position (beta): assumes a 4-finger hand and a single, unshifted
+// position within the user-selected reference box. Guitar/ukulele use a
+// fixed one-finger-per-fret position (CAGED-style), independent of which
+// frets are actually diatonic. Mandolin follows the "next scale note, next
+// finger" convention instead: fingers are assigned in order to the in-scale
+// frets on a given string within the box, skipping non-scale frets entirely
+// rather than counting fret distance. Anything outside the box, or beyond a
+// 4-finger reach within it, is unknown rather than guessed, so it shows a
+// dash.
+function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
+  if (activeBox === null || fret < activeBox.start || fret > activeBox.end) return "–";
+
+  if (instrumentKey === "mandolin") {
+    const pitchClass = NOTES.indexOf(note);
+    const openPitch = (((pitchClass - fret) % 12) + 12) % 12;
+    let rank = 0;
+    for (let f = activeBox.start; f <= fret; f++) {
+      if (inScaleMap.has((openPitch + f) % 12)) rank++;
+    }
+    return rank <= 4 ? String(rank) : "–";
+  }
+
+  const offset = fret - activeBox.start;
+  return offset <= 3 ? String(offset + 1) : "–";
+}
+
+function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey }) {
   const pitchClass = NOTES.indexOf(note);
   const degreeIdx = inScaleMap.get(pitchClass);
   const inScale = degreeIdx !== undefined;
@@ -1042,12 +1159,7 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
   if (labelMode === "degree") {
     label = scale.degrees[degreeIdx];
   } else if (labelMode === "finger") {
-    if (isOpen) {
-      label = "O";
-    } else {
-      const inWindow = activeBox !== null && fret >= activeBox.start && fret <= activeBox.end;
-      label = inWindow ? String(fret - activeBox.start + 1) : scale.degrees[degreeIdx];
-    }
+    label = isOpen ? "O" : fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey);
   }
 
   return (
@@ -1097,45 +1209,31 @@ function pillStyle(active, colors) {
   };
 }
 
-function LabelModeLegend({ labelMode, setLabelMode, colors }) {
-  const modes = [
-    { key: "note", content: "C" },
-    { key: "degree", content: "b3" },
-    { key: "finger", content: <Fingerprint size={10} /> },
-  ];
+function LabelModeButton({ labelMode, active, onClick, colors }) {
+  const current = LABEL_MODES.find((m) => m.key === labelMode);
+  const Icon = current.icon;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-      {modes.map((m) => {
-        const isActive = m.key === labelMode;
-        const size = isActive ? 24 : 19;
-        return (
-          <button
-            key={m.key}
-            onClick={() => setLabelMode(m.key)}
-            aria-label={m.key}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: colors.bg,
-              border: `${isActive ? 2 : 1}px solid ${isActive ? colors.root : colors.toneBorder}`,
-              color: isActive ? colors.root : colors.toneText,
-              opacity: isActive ? 1 : 0.6,
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 9,
-              fontWeight: isActive ? 700 : 400,
-              padding: 0,
-              transition: "width 0.15s ease, height 0.15s ease",
-            }}
-          >
-            {m.content}
-          </button>
-        );
-      })}
-    </div>
+    <button
+      onClick={onClick}
+      aria-label="Label mode"
+      style={{
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "8px 12px",
+        borderRadius: 20,
+        border: `1px solid ${active ? colors.root : colors.panelEdge}`,
+        background: active ? "rgba(201,151,59,0.12)" : "transparent",
+        color: active ? colors.root : colors.text,
+        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontSize: 12,
+        whiteSpace: "nowrap",
+      }}
+    >
+      Labels
+      <Icon size={14} />
+    </button>
   );
 }
 
