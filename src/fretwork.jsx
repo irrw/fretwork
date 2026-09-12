@@ -977,36 +977,6 @@ export default function Fretwork() {
                   margin: "14px 0 8px",
                 }}
               >
-                APPEARANCE
-              </div>
-              <button
-                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 14px",
-                  borderRadius: 20,
-                  border: `1px solid ${c.panelEdge}`,
-                  background: "transparent",
-                  color: c.text,
-                  fontSize: 13,
-                  fontFamily: "'IBM Plex Sans', sans-serif",
-                }}
-              >
-                {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-                {theme === "dark" ? "Dark" : "Light"}
-              </button>
-
-              <div
-                style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: 11,
-                  letterSpacing: "0.08em",
-                  color: c.muted,
-                  margin: "14px 0 8px",
-                }}
-              >
                 EXPERIMENTAL
               </div>
               <button
@@ -1081,6 +1051,24 @@ export default function Fretwork() {
           />
           <div style={{ flex: 1 }} />
           <LabelModeButton labelMode={labelMode} active={panel === "labels"} onClick={() => togglePanel("labels")} colors={c} />
+          <button
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            style={{
+              flexShrink: 0,
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              border: `1px solid ${c.panelEdge}`,
+              background: "transparent",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: c.text,
+            }}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button
             onClick={() => togglePanel("more")}
             aria-label="More settings"
