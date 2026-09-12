@@ -1107,19 +1107,28 @@ export default function Fretwork() {
 }
 
 // Finger position (beta): assumes a 4-finger hand and a single, unshifted
-// position within the user-selected reference box. Mandolin follows the
-// common 1-2-4 pairing (skip the ring finger); guitar and ukulele use one
-// finger per fret. Anything outside the box, or beyond a 4-finger reach
-// within it, is unknown rather than guessed, so it shows a dash.
-function fingerLabel(fret, activeBox, instrumentKey) {
+// position within the user-selected reference box. Guitar/ukulele use a
+// fixed one-finger-per-fret position (CAGED-style), independent of which
+// frets are actually diatonic. Mandolin follows the "next scale note, next
+// finger" convention instead: fingers are assigned in order to the in-scale
+// frets on a given string within the box, skipping non-scale frets entirely
+// rather than counting fret distance. Anything outside the box, or beyond a
+// 4-finger reach within it, is unknown rather than guessed, so it shows a
+// dash.
+function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
   if (activeBox === null || fret < activeBox.start || fret > activeBox.end) return "–";
-  const offset = fret - activeBox.start;
+
   if (instrumentKey === "mandolin") {
-    if (offset <= 1) return "1";
-    if (offset <= 3) return "2";
-    if (offset <= 5) return "4";
-    return "–";
+    const pitchClass = NOTES.indexOf(note);
+    const openPitch = (((pitchClass - fret) % 12) + 12) % 12;
+    let rank = 0;
+    for (let f = activeBox.start; f <= fret; f++) {
+      if (inScaleMap.has((openPitch + f) % 12)) rank++;
+    }
+    return rank <= 4 ? String(rank) : "–";
   }
+
+  const offset = fret - activeBox.start;
   return offset <= 3 ? String(offset + 1) : "–";
 }
 
@@ -1150,7 +1159,7 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
   if (labelMode === "degree") {
     label = scale.degrees[degreeIdx];
   } else if (labelMode === "finger") {
-    label = isOpen ? "O" : fingerLabel(fret, activeBox, instrumentKey);
+    label = isOpen ? "O" : fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey);
   }
 
   return (
