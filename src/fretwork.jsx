@@ -565,6 +565,7 @@ export default function Fretwork() {
                       isRoot={NOTES.indexOf(note) === rootIdx}
                       colors={c}
                       activeBox={activeBox}
+                      instrumentKey={instrumentKey}
                     />
                   </div>
                 );
@@ -642,6 +643,7 @@ export default function Fretwork() {
                           isRoot={NOTES.indexOf(note) === rootIdx}
                           colors={c}
                           activeBox={activeBox}
+                          instrumentKey={instrumentKey}
                         />
                       </div>
                     );
@@ -1104,7 +1106,24 @@ export default function Fretwork() {
   );
 }
 
-function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox }) {
+// Finger position (beta): assumes a 4-finger hand and a single, unshifted
+// position within the user-selected reference box. Mandolin follows the
+// common 1-2-4 pairing (skip the ring finger); guitar and ukulele use one
+// finger per fret. Anything outside the box, or beyond a 4-finger reach
+// within it, is unknown rather than guessed, so it shows a dash.
+function fingerLabel(fret, activeBox, instrumentKey) {
+  if (activeBox === null || fret < activeBox.start || fret > activeBox.end) return "–";
+  const offset = fret - activeBox.start;
+  if (instrumentKey === "mandolin") {
+    if (offset <= 1) return "1";
+    if (offset <= 3) return "2";
+    if (offset <= 5) return "4";
+    return "–";
+  }
+  return offset <= 3 ? String(offset + 1) : "–";
+}
+
+function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey }) {
   const pitchClass = NOTES.indexOf(note);
   const degreeIdx = inScaleMap.get(pitchClass);
   const inScale = degreeIdx !== undefined;
@@ -1131,12 +1150,7 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
   if (labelMode === "degree") {
     label = scale.degrees[degreeIdx];
   } else if (labelMode === "finger") {
-    if (isOpen) {
-      label = "O";
-    } else {
-      const inWindow = activeBox !== null && fret >= activeBox.start && fret <= activeBox.end;
-      label = inWindow ? String(fret - activeBox.start + 1) : scale.degrees[degreeIdx];
-    }
+    label = isOpen ? "O" : fingerLabel(fret, activeBox, instrumentKey);
   }
 
   return (
