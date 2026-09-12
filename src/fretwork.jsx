@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal } from "lucide-react";
+import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal, Music2, Ruler } from "lucide-react";
 import logoMarkUrl from "./assets/icons/fretwork-icon/fretwork-mark.svg";
 
 // ---------- Music data ----------
@@ -19,6 +19,12 @@ const SCALES = {
   "Harmonic Minor": { intervals: [0, 2, 3, 5, 7, 8, 11], degrees: ["1", "2", "b3", "4", "5", "b6", "7"] },
   "Melodic Minor": { intervals: [0, 2, 3, 5, 7, 9, 11], degrees: ["1", "2", "b3", "4", "5", "6", "7"] },
 };
+
+const LABEL_MODES = [
+  { key: "note", label: "Notes", icon: Music2 },
+  { key: "degree", label: "Interval", icon: Ruler },
+  { key: "finger", label: "Finger position", icon: Fingerprint },
+];
 
 const INSTRUMENTS = {
   guitar: {
@@ -125,7 +131,7 @@ export default function Fretwork() {
   const [root, setRoot] = useState(savedPrefs.root ?? "C");
   const [scaleName, setScaleName] = useState(savedPrefs.scaleName ?? "Major");
   const [labelMode, setLabelMode] = useState(savedPrefs.labelMode ?? "note"); // note | degree | finger
-  const [panel, setPanel] = useState(null);
+  const [panel, setPanel] = useState(null); // null | "key" | "more" | "labels"
   const [theme, setTheme] = useState(savedPrefs.theme ?? "dark");
   const [selectionStart, setSelectionStart] = useState(null); // anchor fret while sizing
   const [activeBox, setActiveBox] = useState(null); // { start, end } or null
@@ -850,6 +856,55 @@ export default function Fretwork() {
             </div>
           )}
 
+          {panel === "labels" && (
+            <div>
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: "0.08em",
+                  color: c.muted,
+                  marginBottom: 8,
+                }}
+              >
+                LABELS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {LABEL_MODES.map((m) => {
+                  const Icon = m.icon;
+                  const isActive = m.key === labelMode;
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => {
+                        setLabelMode(m.key);
+                        setPanel(null);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: `1px solid ${isActive ? c.root : c.panelEdge}`,
+                        background: isActive ? "rgba(201,151,59,0.12)" : "transparent",
+                        color: isActive ? c.root : c.text,
+                        fontSize: 14,
+                        fontFamily: "'IBM Plex Sans', sans-serif",
+                        textAlign: "left",
+                      }}
+                    >
+                      <Icon size={16} />
+                      <span style={{ flex: 1 }}>{m.label}</span>
+                      {isActive && <Check size={16} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {panel === "more" && (
             <div>
               <div
@@ -989,7 +1044,7 @@ export default function Fretwork() {
             colors={c}
           />
           <div style={{ flex: 1 }} />
-          <LabelModeLegend labelMode={labelMode} setLabelMode={setLabelMode} colors={c} />
+          <LabelModeButton labelMode={labelMode} active={panel === "labels"} onClick={() => togglePanel("labels")} colors={c} />
           <button
             onClick={() => togglePanel("more")}
             aria-label="More settings"
@@ -1097,45 +1152,31 @@ function pillStyle(active, colors) {
   };
 }
 
-function LabelModeLegend({ labelMode, setLabelMode, colors }) {
-  const modes = [
-    { key: "note", content: "C" },
-    { key: "degree", content: "b3" },
-    { key: "finger", content: <Fingerprint size={10} /> },
-  ];
+function LabelModeButton({ labelMode, active, onClick, colors }) {
+  const current = LABEL_MODES.find((m) => m.key === labelMode);
+  const Icon = current.icon;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-      {modes.map((m) => {
-        const isActive = m.key === labelMode;
-        const size = isActive ? 24 : 19;
-        return (
-          <button
-            key={m.key}
-            onClick={() => setLabelMode(m.key)}
-            aria-label={m.key}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: colors.bg,
-              border: `${isActive ? 2 : 1}px solid ${isActive ? colors.root : colors.toneBorder}`,
-              color: isActive ? colors.root : colors.toneText,
-              opacity: isActive ? 1 : 0.6,
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 9,
-              fontWeight: isActive ? 700 : 400,
-              padding: 0,
-              transition: "width 0.15s ease, height 0.15s ease",
-            }}
-          >
-            {m.content}
-          </button>
-        );
-      })}
-    </div>
+    <button
+      onClick={onClick}
+      aria-label="Label mode"
+      style={{
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "8px 12px",
+        borderRadius: 20,
+        border: `1px solid ${active ? colors.root : colors.panelEdge}`,
+        background: active ? "rgba(201,151,59,0.12)" : "transparent",
+        color: active ? colors.root : colors.text,
+        fontFamily: "'IBM Plex Sans', sans-serif",
+        fontSize: 12,
+        whiteSpace: "nowrap",
+      }}
+    >
+      Labels
+      <Icon size={14} />
+    </button>
   );
 }
 
