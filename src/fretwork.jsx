@@ -174,6 +174,12 @@ export default function Fretwork() {
     if (panel !== "key") setScaleEditMode(false);
   }, [panel]);
 
+  // Keep the browser/system chrome color in sync with the live theme toggle
+  // (index.html's <meta name="theme-color"> only covers the static default).
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", c.bg);
+  }, [c.bg]);
+
   // Persist preferences as they change. Silently no-ops if storage is unavailable.
   useEffect(() => {
     try {
@@ -303,6 +309,7 @@ export default function Fretwork() {
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        paddingTop: "env(safe-area-inset-top)",
         transition: "background 0.2s ease, color 0.2s ease",
       }}
     >
@@ -1009,6 +1016,7 @@ export default function Fretwork() {
           display: "flex",
           justifyContent: "center",
           padding: "10px 12px",
+          paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
           borderTop: `1px solid ${c.panelEdge}`,
           background: c.panel,
           position: "relative",
