@@ -2,7 +2,7 @@
 
 Instructions for converting the React component into a deployable GitHub Pages project. Follow these before the first commit.
 
-> **Note:** kept as-written for history. Actual implementation deviates in two places: `index.html` lives at the project **root**, not `public/` (Vite only processes the HTML entry from root — `public/` is for static assets copied as-is); and the dev server is pinned to **port 5180** (not the default 5173) via `server.port` + `strictPort: true` in `vite.config.js`, to avoid collisions with other local Vite projects. See `README.md` for the current dev URL.
+> **Note:** kept as-written for history. Actual implementation deviates in one place: `index.html` lives at the project **root**, not `public/` (Vite only processes the HTML entry from root — `public/` is for static assets copied as-is). The dev server uses Vite's default port (5173, via `strictPort: true` in `vite.config.js`). See `README.md` for the current dev URL.
 
 ## Folder structure
 
