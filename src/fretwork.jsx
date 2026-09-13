@@ -174,12 +174,6 @@ export default function Fretwork() {
     if (panel !== "key") setScaleEditMode(false);
   }, [panel]);
 
-  // Keep the browser/system chrome color in sync with the live theme toggle
-  // (index.html's <meta name="theme-color"> only covers the static default).
-  useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", c.bg);
-  }, [c.bg]);
-
   // Persist preferences as they change. Silently no-ops if storage is unavailable.
   useEffect(() => {
     try {
