@@ -73,3 +73,34 @@ Remaining:
   Several UI directions were compared (passive caption under the Key chip, badges on scale pills, a one-tap "reroot" swap, long-press-to-preview on the fretboard, reframing the picker around collection-then-tonic) before landing on the most promising one to prototype: a circle-of-fifths-style dial, radio-tuner metaphor — fixed window, rotating collection underneath, with a secondary control to re-root within the collection without changing the notes. Built and compared two versions of this side by side (a cheap scroll-snap linear reel vs. a literal rotating dial with drag/angle geometry) in a working prototype, since circular drag was flagged as only worth the added complexity if it earned its keep.
 
   Not yet decided: fifths order vs. chromatic order for the outer collection control (fifths matches key-signature theory; chromatic matches the fretboard's own layout); whether the reel's simpler interaction holds up against the dial once both have been used for a while; whether this replaces the existing Key chip outright or ships as an opt-in "explore" mode alongside the curated default, consistent with how the scale-pill list already hides complexity behind edit mode.
+
+## Feature ideas (not yet designed)
+
+Captured so they don't get lost. None of these are committed to; each needs a design pass before building.
+
+- **Interval-relationship coloring (idea)**: color note tokens by their relationship to the root. Two possible shapes: (a) one color per interval, or (b) selectable *groups* of relationships — e.g. "show the 1-4-5," "show the minor intervals (b3, b6, b7)." Working hunch: coloring all 12 intervals at once will be overwhelming and less useful than no color at all, so (b) is the more promising direction — color is a spotlight on one group at a time, everything else stays neutral. Open questions: which groups to offer by default; what the palette is (must read in both the ebony and parchment themes, and must not collide with the root's brass accent or the double-stop connectors); how it interacts with the existing label modes and the active box.
+- **Highlight by string (idea)**: tapping an open-string indicator highlights that whole string; tapping another adds it to the selection. Composes with the existing fret-based highlighting as an intersection: e.g. select frets 5 and 9, then strings A and E → only the rectangle under both constraints is in focus. Clearing the fret selection falls back to highlighting the selected strings along the full neck. Double stops (3rds/6ths) should render inside the highlighted area exactly as they do today for fret-based boxes. Open questions: how a string tap is distinguished from the open-string note itself; whether string selection persists across key/scale changes like the box does.
+- **Label double-stop connectors with their chord function (idea, needs the theory settled first)**: see the note below — a 3rd/6th dyad is two notes of a triad, so each connector could carry a Roman-numeral label telling the player what chord that double stop implies ("this is a V-chord double stop").
+
+### Background: what does a double stop "mean" harmonically?
+
+Worked example, G major, D + F#:
+
+- D is scale degree 5, F# is degree 7; they're a major 3rd apart.
+- A diatonic 3rd is two of the three notes of a triad, so on its own it's ambiguous — it always fits (at least) two chords: as **root + 3rd** of the chord built on the lower note, or as **3rd + 5th** of the chord a 3rd below that. D–F# is root+3rd of **D (V)** and 3rd+5th of **Bm (iii)**. What the ear actually hears depends on what the band/bass is playing underneath: over a D bass it's V, over G it's the top of a Gmaj7, over B it's Bm.
+- **6ths are inverted 3rds.** F# below D (a minor 6th) is the same two notes, so it implies the same chords. Practical rule for labeling: for a 3rd, the "root+3rd" chord is named after the *lower* note; for a 6th, after the *upper* note.
+- Useful property for bluegrass/I-IV-V music: the I, IV and V triads together contain all seven notes of the major scale, so nearly every diatonic 3rd sits inside one of them. In G major:
+
+  | Dyad | root+3rd of | 3rd+5th of | Primary-chord reading |
+  |---|---|---|---|
+  | G–B | I (G) | vi (Em) | **I** |
+  | A–C | ii (Am) | vii° (F#°) | ii — or the 5th+7th of **V7** (D7) |
+  | B–D | iii (Bm) | I (G) | **I** |
+  | C–E | IV (C) | ii (Am) | **IV** |
+  | D–F# | V (D) | iii (Bm) | **V** |
+  | E–G | vi (Em) | IV (C) | **IV** |
+  | F#–A | vii° (F#°) | V (D) | **V** |
+
+  So a labeling scheme that prefers I/IV/V when one applies gives a clear, practical label for 6 of 7 dyads, and "ii / V7" for the odd one out.
+- **On G *minor***: F# isn't in G natural minor at all, so D–F# only shows up with harmonic minor — and there it's exactly the major V chord (D), which is the whole reason harmonic minor raises the 7th. Minor keys will need their own primary-chord preference (i, iv, V/v).
+- Possible alternative framing worth comparing before building labels: invert it — the user picks the chord being played (I, IV, V…), and the neck highlights the double stops that belong to it. That answers "what can I play over this chord" directly instead of asking the player to decode a label per connector.
