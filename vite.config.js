@@ -9,6 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       strategies: 'generateSW',
       manifest: {
+        id: '/',
         name: 'Fretwork',
         short_name: 'Fretwork',
         description: 'A mobile-first scale and fingering visualizer for fretted instruments.',
@@ -22,6 +23,10 @@ export default defineConfig({
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        screenshots: [
+          { src: '/screenshots/wide.png', sizes: '1280x800', type: 'image/png', form_factor: 'wide' },
+          { src: '/screenshots/narrow.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow' },
         ],
       },
       workbox: {
