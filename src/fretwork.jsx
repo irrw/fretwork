@@ -998,7 +998,7 @@ export default function Fretwork() {
                 }}
               >
                 <Fingerprint size={14} />
-                Finger position (beta)
+                Finger position labels (beta)
               </button>
             </div>
           )}
