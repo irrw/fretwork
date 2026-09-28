@@ -34,6 +34,7 @@ const INSTRUMENTS = {
   guitar: {
     label: "Guitar",
     frets: 15,
+    inlays: [3, 5, 7, 9, 12, 15], // position-marker dots; 12 is drawn as a double dot
     tunings: {
       "Standard": ["E", "A", "D", "G", "B", "E"], // low -> high, left -> right
       "Drop D": ["D", "A", "D", "G", "B", "E"],
@@ -45,6 +46,7 @@ const INSTRUMENTS = {
   mandolin: {
     label: "Mandolin",
     frets: 15,
+    inlays: [3, 5, 7, 10, 12, 15],
     tunings: {
       "Standard (GDAE)": ["G", "D", "A", "E"],
       "Cross (AEAE)": ["A", "E", "A", "E"],
@@ -53,6 +55,7 @@ const INSTRUMENTS = {
   ukulele: {
     label: "Ukulele",
     frets: 15,
+    inlays: [5, 7, 10, 12, 15],
     tunings: {
       "Standard (GCEA)": ["G", "C", "E", "A"],
       "Baritone (DGBE)": ["D", "G", "B", "E"],
@@ -60,7 +63,6 @@ const INSTRUMENTS = {
   },
 };
 
-const INLAY_FRETS = [3, 5, 7, 9, 12, 15];
 const DEFAULT_VISIBLE_SCALES = ["Major", "Dorian", "Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Mixolydian"];
 // (box width is now user-chosen, see selectionStart/activeBox below)
 
@@ -343,7 +345,7 @@ export default function Fretwork() {
             <div style={{ height: NUT_H }} />
             {Array.from({ length: instrument.frets }).map((_, i) => {
               const fret = i + 1;
-              const isInlay = INLAY_FRETS.includes(fret);
+              const isInlay = instrument.inlays.includes(fret);
               const isSizing = selectionStart !== null;
               const isAnchor = fret === selectionStart;
               const isBoundary = activeBox !== null && (fret === activeBox.start || fret === activeBox.end);
@@ -579,7 +581,7 @@ export default function Fretwork() {
             {/* fret rows */}
             {Array.from({ length: instrument.frets }).map((_, i) => {
               const fret = i + 1;
-              const isInlay = INLAY_FRETS.includes(fret);
+              const isInlay = instrument.inlays.includes(fret);
               const isDouble = fret === 12;
               return (
                 <div
