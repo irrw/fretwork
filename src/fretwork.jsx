@@ -61,6 +61,22 @@ const INSTRUMENTS = {
       "Baritone (DGBE)": ["D", "G", "B", "E"],
     },
   },
+  banjo: {
+    label: "Banjo",
+    frets: 15,
+    inlays: [3, 5, 7, 10, 12, 15],
+    // 5-string banjo: the short 5th (drone) string sits on the bass side, so it's
+    // leftmost in the player's view even though it's pitched high, and it starts
+    // at the 5th fret instead of the nut. A string can be a plain note name or
+    // { note, startFret } for a string like this.
+    tunings: {
+      "Open G (gDGBD)": [{ note: "G", startFret: 5 }, "D", "G", "B", "D"],
+      "Double C (gCGCD)": [{ note: "G", startFret: 5 }, "C", "G", "C", "D"],
+      "Sawmill (gDGCD)": [{ note: "G", startFret: 5 }, "D", "G", "C", "D"],
+      "Open D (f#DF#AD)": [{ note: "F#", startFret: 5 }, "D", "F#", "A", "D"],
+      "Drop C (gCGBD)": [{ note: "G", startFret: 5 }, "C", "G", "B", "D"],
+    },
+  },
 };
 
 const DEFAULT_VISIBLE_SCALES = ["Major", "Dorian", "Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Mixolydian"];
@@ -157,7 +173,13 @@ export default function Fretwork() {
   const c = THEMES[theme];
   const instrument = INSTRUMENTS[instrumentKey];
   const tuningNames = Object.keys(instrument.tunings);
-  const strings = instrument.tunings[tuningName] || instrument.tunings[tuningNames[0]];
+  const strings = useMemo(
+    () =>
+      (instrument.tunings[tuningName] || instrument.tunings[tuningNames[0]]).map((st) =>
+        typeof st === "string" ? { note: st, startFret: 0 } : st
+      ),
+    [instrument, tuningName]
+  );
   const scale = SCALES[scaleName];
   const rootIdx = NOTES.indexOf(root);
 
@@ -256,8 +278,11 @@ export default function Fretwork() {
     const boxEnd = Math.min(instrument.frets, activeBox.end);
     const pairs = [];
     for (let i = 0; i < strings.length - 1; i++) {
-      const openA = strings[i];
-      const openB = strings[i + 1];
+      // Skip pairs with a short drone string (banjo's 5th): it's a drone, not a
+      // double-stop partner, and it doesn't exist below its start fret anyway.
+      if (strings[i].startFret > 0 || strings[i + 1].startFret > 0) continue;
+      const openA = strings[i].note;
+      const openB = strings[i + 1].note;
       for (let f = activeBox.start; f <= boxEnd; f++) {
         const pitchA = NOTES.indexOf(noteAt(openA, f));
         if (!inScaleMap.has(pitchA)) continue;
@@ -306,6 +331,17 @@ export default function Fretwork() {
   const dsDisplay = { off: "Off", third: "3rds", sixth: "6ths" };
 
   const gridW = strings.length * COL_W;
+
+  // Inlay dots are centered on the full-length strings, so a short string
+  // (banjo's 5th) doesn't pull them onto the middle string. With no short
+  // string these are the usual 50% / 33% / 67%.
+  const inlayPos = useMemo(() => {
+    const full = strings.map((st, i) => (st.startFret === 0 ? i : -1)).filter((i) => i >= 0);
+    if (full.length === strings.length) return { center: "50%", left: "33%", right: "67%" };
+    const center = ((full[0] + full[full.length - 1] + 1) / 2 / strings.length) * 100;
+    const offset = (17 * full.length) / strings.length;
+    return { center: `${center}%`, left: `${center - offset}%`, right: `${center + offset}%` };
+  }, [strings]);
   const totalH = OPEN_H + NUT_H + instrument.frets * ROW_H;
 
   return (
@@ -509,41 +545,66 @@ export default function Fretwork() {
             )}
 
             {/* vertical string lines */}
-            {strings.map((_, sIdx) => (
-              <div
-                key={sIdx}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  height: totalH,
-                  left: sIdx * COL_W + COL_W / 2,
-                  width: 1 + (strings.length - 1 - sIdx) * 0.3,
-                  background: c.string,
-                }}
-              />
-            ))}
+            {strings.map((st, sIdx) => {
+              // A short string (banjo's 5th) starts at its open-note position on
+              // the neck instead of the nut, and is the thinnest string.
+              const top = st.startFret > 0 ? OPEN_H + NUT_H + (st.startFret - 1) * ROW_H + ROW_H / 2 : 0;
+              return (
+                <div
+                  key={sIdx}
+                  style={{
+                    position: "absolute",
+                    top,
+                    height: totalH - top,
+                    left: sIdx * COL_W + COL_W / 2,
+                    width: st.startFret > 0 ? 1 : 1 + (strings.length - 1 - sIdx) * 0.3,
+                    background: c.string,
+                  }}
+                />
+              );
+            })}
+
+            {/* mini nut for a short string, just below its open-note position */}
+            {strings.map((st, sIdx) =>
+              st.startFret > 0 ? (
+                <div
+                  key={`nut-${sIdx}`}
+                  style={{
+                    position: "absolute",
+                    top: OPEN_H + NUT_H + st.startFret * ROW_H - NUT_H,
+                    left: sIdx * COL_W + COL_W * 0.2,
+                    width: COL_W * 0.6,
+                    height: NUT_H,
+                    background: c.nut,
+                    borderRadius: 1,
+                  }}
+                />
+              ) : null
+            )}
 
             {/* open row */}
             <div style={{ height: OPEN_H, display: "flex", position: "relative" }}>
-              {strings.map((openNote, sIdx) => {
-                const note = noteAt(openNote, 0);
+              {strings.map((st, sIdx) => {
+                const note = st.note;
                 return (
                   <div
                     key={sIdx}
                     style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
                   >
-                    <NoteCell
-                      note={note}
-                      fret={0}
-                      isOpen
-                      inScaleMap={inScaleMap}
-                      labelMode={labelMode}
-                      scale={scale}
-                      isRoot={NOTES.indexOf(note) === rootIdx}
-                      colors={c}
-                      activeBox={activeBox}
-                      instrumentKey={instrumentKey}
-                    />
+                    {st.startFret === 0 && (
+                      <NoteCell
+                        note={note}
+                        fret={0}
+                        isOpen
+                        inScaleMap={inScaleMap}
+                        labelMode={labelMode}
+                        scale={scale}
+                        isRoot={NOTES.indexOf(note) === rootIdx}
+                        colors={c}
+                        activeBox={activeBox}
+                        instrumentKey={instrumentKey}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -566,7 +627,7 @@ export default function Fretwork() {
                     <div
                       style={{
                         position: "absolute",
-                        left: "50%",
+                        left: inlayPos.center,
                         top: "50%",
                         transform: "translate(-50%,-50%)",
                         width: 7,
@@ -581,7 +642,7 @@ export default function Fretwork() {
                       <div
                         style={{
                           position: "absolute",
-                          left: "33%",
+                          left: inlayPos.left,
                           top: "50%",
                           transform: "translate(-50%,-50%)",
                           width: 7,
@@ -593,7 +654,7 @@ export default function Fretwork() {
                       <div
                         style={{
                           position: "absolute",
-                          left: "67%",
+                          left: inlayPos.right,
                           top: "50%",
                           transform: "translate(-50%,-50%)",
                           width: 7,
@@ -604,24 +665,30 @@ export default function Fretwork() {
                       />
                     </>
                   )}
-                  {strings.map((openNote, sIdx) => {
-                    const note = noteAt(openNote, fret);
+                  {strings.map((st, sIdx) => {
+                    // Fret relative to where this string starts (0 = its open note);
+                    // a short string has nothing to show above its start fret.
+                    const localFret = fret - st.startFret;
+                    const note = noteAt(st.note, localFret);
                     return (
                       <div
                         key={sIdx}
                         style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
                       >
-                        <NoteCell
-                          note={note}
-                          fret={fret}
-                          inScaleMap={inScaleMap}
-                          labelMode={labelMode}
-                          scale={scale}
-                          isRoot={NOTES.indexOf(note) === rootIdx}
-                          colors={c}
-                          activeBox={activeBox}
-                          instrumentKey={instrumentKey}
-                        />
+                        {localFret >= 0 && (
+                          <NoteCell
+                            note={note}
+                            fret={fret}
+                            isOpen={localFret === 0}
+                            inScaleMap={inScaleMap}
+                            labelMode={labelMode}
+                            scale={scale}
+                            isRoot={NOTES.indexOf(note) === rootIdx}
+                            colors={c}
+                            activeBox={activeBox}
+                            instrumentKey={instrumentKey}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1083,6 +1150,9 @@ export default function Fretwork() {
 // dash.
 function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
   if (activeBox === null || fret < activeBox.start || fret > activeBox.end) return "–";
+  // Banjo fingering conventions haven't been researched yet (see DECISIONS.md),
+  // so it shows "unknown" rather than borrowing another instrument's rule.
+  if (instrumentKey === "banjo") return "–";
 
   if (instrumentKey === "mandolin") {
     const pitchClass = NOTES.indexOf(note);
