@@ -142,6 +142,7 @@ export default function Fretwork() {
   const [selectionStart, setSelectionStart] = useState(null); // anchor fret while sizing
   const [activeBox, setActiveBox] = useState(null); // { start, end } or null
   const [hasUsedBox, setHasUsedBox] = useState(false);
+  const [hasSetBoxWidth, setHasSetBoxWidth] = useState(false);
   const [dsMode, setDsMode] = useState(savedPrefs.dsMode ?? "off"); // off | third | sixth
   const [hiddenScales, setHiddenScales] = useState(
     savedPrefs.hiddenScales ?? Object.keys(SCALES).filter((s) => !DEFAULT_VISIBLE_SCALES.includes(s))
@@ -243,6 +244,7 @@ export default function Fretwork() {
       // Step 2: the second tap sets the width, in either direction.
       setActiveBox({ start: Math.min(selectionStart, fret), end: Math.max(selectionStart, fret) });
       setSelectionStart(null);
+      setHasSetBoxWidth(true);
     }
   };
 
@@ -281,6 +283,11 @@ export default function Fretwork() {
     }
     return pairs;
   }, [activeBox, dsMode, strings, inScaleMap, instrument.frets]);
+
+  const dismissFretTip = () => {
+    setFretTipDismissed(true);
+    if (fretTipCheckbox) setDontShowFretTip(true);
+  };
 
   const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
   const visibleScaleNames = Object.keys(SCALES).filter((s) => !hiddenScales.includes(s));
@@ -442,67 +449,28 @@ export default function Fretwork() {
               />
             )}
 
-            {/* "tap a fret" onboarding tooltip — points at FRET_TIP_TARGET */}
-            {!hasUsedBox && !fretTipDismissed && !dontShowFretTip && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: 6,
-                  top: OPEN_H + NUT_H + (FRET_TIP_TARGET - 1) * ROW_H + ROW_H / 2 - 20,
-                  width: 190,
-                  zIndex: 4,
-                  background: c.panel,
-                  border: `1px solid ${c.panelEdge}`,
-                  borderRadius: 10,
-                  boxShadow: `0 0 20px 3px ${c.glow}`,
-                  padding: "10px 12px 12px",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    left: -6,
-                    top: 20,
-                    width: 11,
-                    height: 11,
-                    background: c.panel,
-                    borderLeft: `1px solid ${c.panelEdge}`,
-                    borderBottom: `1px solid ${c.panelEdge}`,
-                    transform: "rotate(45deg)",
-                  }}
-                />
-                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4, marginBottom: 10 }}>
-                  Tap a fret to start a box, tap another to set its width
-                </div>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 11,
-                    color: c.muted,
-                    marginBottom: 10,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={fretTipCheckbox}
-                    onChange={(e) => setFretTipCheckbox(e.target.checked)}
-                    style={{ accentColor: c.root }}
-                  />
-                  Don't show this again
-                </label>
-                <button
-                  onClick={() => {
-                    setFretTipDismissed(true);
-                    if (fretTipCheckbox) setDontShowFretTip(true);
-                  }}
-                  style={{ ...pillStyle(true, c), width: "100%", textAlign: "center" }}
-                >
-                  Dismiss
-                </button>
-              </div>
+            {/* Two-step onboarding tooltip: step 1 points at FRET_TIP_TARGET ("start a
+                box"); once that first tap drops an anchor, step 2 points at a nearby
+                fret ("set its width"). One dismissal / don't-show-again covers both. */}
+            {!fretTipDismissed && !dontShowFretTip && !hasUsedBox && (
+              <OnboardingTip
+                fret={FRET_TIP_TARGET}
+                text="Tap a fret to start a box, tap another to set its width"
+                colors={c}
+                checked={fretTipCheckbox}
+                onCheck={setFretTipCheckbox}
+                onDismiss={dismissFretTip}
+              />
+            )}
+            {!fretTipDismissed && !dontShowFretTip && selectionStart !== null && !hasSetBoxWidth && (
+              <OnboardingTip
+                fret={widthTipFret(selectionStart, instrument.frets)}
+                text="Now tap another fret to set the box's width"
+                colors={c}
+                checked={fretTipCheckbox}
+                onCheck={setFretTipCheckbox}
+                onDismiss={dismissFretTip}
+              />
             )}
 
             {/* double-stop connectors */}
@@ -1178,6 +1146,68 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
       }}
     >
       {label}
+    </div>
+  );
+}
+
+// Fret the step-2 ("set its width") tooltip points at: two frets past the
+// anchor, or two before it near the end of the neck so the tooltip stays on it.
+function widthTipFret(anchor, frets) {
+  return anchor + 2 <= frets - 2 ? anchor + 2 : anchor - 2;
+}
+
+function OnboardingTip({ fret, text, colors, checked, onCheck, onDismiss }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 6,
+        top: OPEN_H + NUT_H + (fret - 1) * ROW_H + ROW_H / 2 - 20,
+        width: 190,
+        zIndex: 4,
+        background: colors.panel,
+        border: `1px solid ${colors.panelEdge}`,
+        borderRadius: 10,
+        boxShadow: `0 0 20px 3px ${colors.glow}`,
+        padding: "10px 12px 12px",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: -6,
+          top: 20,
+          width: 11,
+          height: 11,
+          background: colors.panel,
+          borderLeft: `1px solid ${colors.panelEdge}`,
+          borderBottom: `1px solid ${colors.panelEdge}`,
+          transform: "rotate(45deg)",
+        }}
+      />
+      <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.4, marginBottom: 10 }}>{text}</div>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 11,
+          color: colors.muted,
+          marginBottom: 10,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onCheck(e.target.checked)}
+          style={{ accentColor: colors.root }}
+        />
+        Don't show this again
+      </label>
+      <button onClick={onDismiss} style={{ ...pillStyle(true, colors), width: "100%", textAlign: "center" }}>
+        Dismiss
+      </button>
     </div>
   );
 }
