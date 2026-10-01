@@ -38,12 +38,21 @@
       overflow: hidden;
       background-color: #100E0B;
     }
-    @media (prefers-color-scheme: light) {
-      html, body, #root {
-        background-color: #F1E9D8;
-      }
+    /* The page behind the app follows the in-app theme (not the OS scheme),
+       so anything it exposes — e.g. during an iOS rotation — matches the app. */
+    html[data-theme="light"], html[data-theme="light"] body, html[data-theme="light"] #root {
+      background-color: #F1E9D8;
     }
   </style>
+  <script>
+    // Apply the saved in-app theme before first paint; the app defaults to dark.
+    try {
+      var savedTheme = JSON.parse(localStorage.getItem("fretwork.prefs.v1") || "{}").theme;
+      document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+    } catch (e) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  </script>
 </head>
 <body>
   <div id="root"></div>

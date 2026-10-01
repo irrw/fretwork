@@ -176,6 +176,12 @@ export default function Fretwork() {
     if (panel !== "key") setScaleEditMode(false);
   }, [panel]);
 
+  // Keep the page behind the app in sync with the in-app theme (see index.html),
+  // so nothing lighter/darker shows through while iOS re-lays out on rotation.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   // Persist preferences as they change. Silently no-ops if storage is unavailable.
   useEffect(() => {
     try {
