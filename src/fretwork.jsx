@@ -61,6 +61,22 @@ const INSTRUMENTS = {
       "Baritone (DGBE)": ["D", "G", "B", "E"],
     },
   },
+  banjo: {
+    label: "Banjo",
+    frets: 15,
+    inlays: [3, 5, 7, 10, 12, 15],
+    // 5-string banjo: the short 5th (drone) string sits on the bass side, so it's
+    // leftmost in the player's view even though it's pitched high, and it starts
+    // at the 5th fret instead of the nut. A string can be a plain note name or
+    // { note, startFret } for a string like this.
+    tunings: {
+      "Open G (gDGBD)": [{ note: "G", startFret: 5 }, "D", "G", "B", "D"],
+      "Double C (gCGCD)": [{ note: "G", startFret: 5 }, "C", "G", "C", "D"],
+      "Sawmill (gDGCD)": [{ note: "G", startFret: 5 }, "D", "G", "C", "D"],
+      "Open D (f#DF#AD)": [{ note: "F#", startFret: 5 }, "D", "F#", "A", "D"],
+      "Drop C (gCGBD)": [{ note: "G", startFret: 5 }, "C", "G", "B", "D"],
+    },
+  },
 };
 
 const DEFAULT_VISIBLE_SCALES = ["Major", "Dorian", "Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Mixolydian"];
@@ -142,6 +158,8 @@ export default function Fretwork() {
   const [selectionStart, setSelectionStart] = useState(null); // anchor fret while sizing
   const [activeBox, setActiveBox] = useState(null); // { start, end } or null
   const [hasUsedBox, setHasUsedBox] = useState(false);
+  const [hasSetBoxWidth, setHasSetBoxWidth] = useState(false);
+  const [selectedStrings, setSelectedStrings] = useState([]); // string indices highlighted via the open-string row
   const [dsMode, setDsMode] = useState(savedPrefs.dsMode ?? "off"); // off | third | sixth
   const [hiddenScales, setHiddenScales] = useState(
     savedPrefs.hiddenScales ?? Object.keys(SCALES).filter((s) => !DEFAULT_VISIBLE_SCALES.includes(s))
@@ -156,7 +174,13 @@ export default function Fretwork() {
   const c = THEMES[theme];
   const instrument = INSTRUMENTS[instrumentKey];
   const tuningNames = Object.keys(instrument.tunings);
-  const strings = instrument.tunings[tuningName] || instrument.tunings[tuningNames[0]];
+  const strings = useMemo(
+    () =>
+      (instrument.tunings[tuningName] || instrument.tunings[tuningNames[0]]).map((st) =>
+        typeof st === "string" ? { note: st, startFret: 0 } : st
+      ),
+    [instrument, tuningName]
+  );
   const scale = SCALES[scaleName];
   const rootIdx = NOTES.indexOf(root);
 
@@ -170,11 +194,18 @@ export default function Fretwork() {
   useEffect(() => {
     setActiveBox(null);
     setSelectionStart(null);
+    setSelectedStrings([]);
   }, [instrumentKey]);
 
   useEffect(() => {
     if (panel !== "key") setScaleEditMode(false);
   }, [panel]);
+
+  // Keep the page behind the app in sync with the in-app theme (see index.html),
+  // so nothing lighter/darker shows through while iOS re-lays out on rotation.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   // Persist preferences as they change. Silently no-ops if storage is unavailable.
   useEffect(() => {
@@ -237,20 +268,32 @@ export default function Fretwork() {
       // Step 2: the second tap sets the width, in either direction.
       setActiveBox({ start: Math.min(selectionStart, fret), end: Math.max(selectionStart, fret) });
       setSelectionStart(null);
+      setHasSetBoxWidth(true);
     }
   };
 
+  // Highlight by string: selected strings narrow the focus area to their columns,
+  // within the active box if there is one, or along the whole neck if not.
+  const toggleString = (sIdx) =>
+    setSelectedStrings((prev) => (prev.includes(sIdx) ? prev.filter((i) => i !== sIdx) : [...prev, sIdx]));
+
   // Diatonic double-stop pairs: adjacent-string note pairs a 3rd or 6th apart,
-  // scoped to the active box so the overlay doesn't clutter the whole neck.
+  // scoped to the focus area (active box rows × selected strings) so the overlay
+  // doesn't clutter the whole neck. With no box and no selected strings: none.
   const doubleStopPairs = useMemo(() => {
-    if (activeBox === null || dsMode === "off") return [];
+    if (dsMode === "off" || (activeBox === null && selectedStrings.length === 0)) return [];
     const offsets = dsMode === "third" ? [4, 3] : [9, 8];
-    const boxEnd = Math.min(instrument.frets, activeBox.end);
+    const rangeStart = activeBox ? activeBox.start : 1;
+    const rangeEnd = activeBox ? Math.min(instrument.frets, activeBox.end) : instrument.frets;
     const pairs = [];
     for (let i = 0; i < strings.length - 1; i++) {
-      const openA = strings[i];
-      const openB = strings[i + 1];
-      for (let f = activeBox.start; f <= boxEnd; f++) {
+      if (selectedStrings.length > 0 && !(selectedStrings.includes(i) && selectedStrings.includes(i + 1))) continue;
+      // Skip pairs with a short drone string (banjo's 5th): it's a drone, not a
+      // double-stop partner, and it doesn't exist below its start fret anyway.
+      if (strings[i].startFret > 0 || strings[i + 1].startFret > 0) continue;
+      const openA = strings[i].note;
+      const openB = strings[i + 1].note;
+      for (let f = rangeStart; f <= rangeEnd; f++) {
         const pitchA = NOTES.indexOf(noteAt(openA, f));
         if (!inScaleMap.has(pitchA)) continue;
         let targetPitch = null;
@@ -274,7 +317,12 @@ export default function Fretwork() {
       }
     }
     return pairs;
-  }, [activeBox, dsMode, strings, inScaleMap, instrument.frets]);
+  }, [activeBox, selectedStrings, dsMode, strings, inScaleMap, instrument.frets]);
+
+  const dismissFretTip = () => {
+    setFretTipDismissed(true);
+    if (fretTipCheckbox) setDontShowFretTip(true);
+  };
 
   const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
   const visibleScaleNames = Object.keys(SCALES).filter((s) => !hiddenScales.includes(s));
@@ -293,6 +341,17 @@ export default function Fretwork() {
   const dsDisplay = { off: "Off", third: "3rds", sixth: "6ths" };
 
   const gridW = strings.length * COL_W;
+
+  // Inlay dots are centered on the full-length strings, so a short string
+  // (banjo's 5th) doesn't pull them onto the middle string. With no short
+  // string these are the usual 50% / 33% / 67%.
+  const inlayPos = useMemo(() => {
+    const full = strings.map((st, i) => (st.startFret === 0 ? i : -1)).filter((i) => i >= 0);
+    if (full.length === strings.length) return { center: "50%", left: "33%", right: "67%" };
+    const center = ((full[0] + full[full.length - 1] + 1) / 2 / strings.length) * 100;
+    const offset = (17 * full.length) / strings.length;
+    return { center: `${center}%`, left: `${center - offset}%`, right: `${center + offset}%` };
+  }, [strings]);
   const totalH = OPEN_H + NUT_H + instrument.frets * ROW_H;
 
   return (
@@ -421,8 +480,8 @@ export default function Fretwork() {
 
           {/* Grid */}
           <div style={{ position: "relative", width: gridW }}>
-            {/* active box highlight band */}
-            {activeBox !== null && (
+            {/* active box highlight band (full width when no strings are selected) */}
+            {activeBox !== null && selectedStrings.length === 0 && (
               <div
                 style={{
                   position: "absolute",
@@ -436,67 +495,59 @@ export default function Fretwork() {
               />
             )}
 
-            {/* "tap a fret" onboarding tooltip — points at FRET_TIP_TARGET */}
-            {!hasUsedBox && !fretTipDismissed && !dontShowFretTip && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: 6,
-                  top: OPEN_H + NUT_H + (FRET_TIP_TARGET - 1) * ROW_H + ROW_H / 2 - 20,
-                  width: 190,
-                  zIndex: 4,
-                  background: c.panel,
-                  border: `1px solid ${c.panelEdge}`,
-                  borderRadius: 10,
-                  boxShadow: `0 0 20px 3px ${c.glow}`,
-                  padding: "10px 12px 12px",
-                }}
-              >
+            {/* selected-string bands: the open-string cell marks the selection, and the
+                column is highlighted within the box, or down the whole neck without one */}
+            {selectedStrings.map((sIdx) => (
+              <React.Fragment key={`str-${sIdx}`}>
                 <div
                   style={{
                     position: "absolute",
-                    left: -6,
-                    top: 20,
-                    width: 11,
-                    height: 11,
-                    background: c.panel,
-                    borderLeft: `1px solid ${c.panelEdge}`,
-                    borderBottom: `1px solid ${c.panelEdge}`,
-                    transform: "rotate(45deg)",
+                    left: sIdx * COL_W,
+                    width: COL_W,
+                    top: 0,
+                    height: activeBox ? OPEN_H : totalH,
+                    background: c.band,
+                    pointerEvents: "none",
                   }}
                 />
-                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4, marginBottom: 10 }}>
-                  Tap a fret to start a box, tap another to set its width
-                </div>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 11,
-                    color: c.muted,
-                    marginBottom: 10,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={fretTipCheckbox}
-                    onChange={(e) => setFretTipCheckbox(e.target.checked)}
-                    style={{ accentColor: c.root }}
+                {activeBox && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: sIdx * COL_W,
+                      width: COL_W,
+                      top: OPEN_H + NUT_H + (activeBox.start - 1) * ROW_H,
+                      height: (activeBox.end - activeBox.start + 1) * ROW_H,
+                      background: c.band,
+                      pointerEvents: "none",
+                    }}
                   />
-                  Don't show this again
-                </label>
-                <button
-                  onClick={() => {
-                    setFretTipDismissed(true);
-                    if (fretTipCheckbox) setDontShowFretTip(true);
-                  }}
-                  style={{ ...pillStyle(true, c), width: "100%", textAlign: "center" }}
-                >
-                  Dismiss
-                </button>
-              </div>
+                )}
+              </React.Fragment>
+            ))}
+
+            {/* Two-step onboarding tooltip: step 1 points at FRET_TIP_TARGET ("start a
+                box"); once that first tap drops an anchor, step 2 points at a nearby
+                fret ("set its width"). One dismissal / don't-show-again covers both. */}
+            {!fretTipDismissed && !dontShowFretTip && !hasUsedBox && (
+              <OnboardingTip
+                fret={FRET_TIP_TARGET}
+                text="Tap a fret to start a box, tap another to set its width"
+                colors={c}
+                checked={fretTipCheckbox}
+                onCheck={setFretTipCheckbox}
+                onDismiss={dismissFretTip}
+              />
+            )}
+            {!fretTipDismissed && !dontShowFretTip && selectionStart !== null && !hasSetBoxWidth && (
+              <OnboardingTip
+                fret={widthTipFret(selectionStart, instrument.frets)}
+                text="Now tap another fret to set the box's width"
+                colors={c}
+                checked={fretTipCheckbox}
+                onCheck={setFretTipCheckbox}
+                onDismiss={dismissFretTip}
+              />
             )}
 
             {/* double-stop connectors */}
@@ -535,42 +586,80 @@ export default function Fretwork() {
             )}
 
             {/* vertical string lines */}
-            {strings.map((_, sIdx) => (
-              <div
-                key={sIdx}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  height: totalH,
-                  left: sIdx * COL_W + COL_W / 2,
-                  width: 1 + (strings.length - 1 - sIdx) * 0.3,
-                  background: c.string,
-                }}
-              />
-            ))}
+            {strings.map((st, sIdx) => {
+              // A short string (banjo's 5th) starts at its open-note position on
+              // the neck instead of the nut, and is the thinnest string.
+              const top = st.startFret > 0 ? OPEN_H + NUT_H + (st.startFret - 1) * ROW_H + ROW_H / 2 : 0;
+              return (
+                <div
+                  key={sIdx}
+                  style={{
+                    position: "absolute",
+                    top,
+                    height: totalH - top,
+                    left: sIdx * COL_W + COL_W / 2,
+                    width: st.startFret > 0 ? 1 : 1 + (strings.length - 1 - sIdx) * 0.3,
+                    background: c.string,
+                  }}
+                />
+              );
+            })}
+
+            {/* mini nut for a short string, just below its open-note position */}
+            {strings.map((st, sIdx) =>
+              st.startFret > 0 ? (
+                <div
+                  key={`nut-${sIdx}`}
+                  style={{
+                    position: "absolute",
+                    top: OPEN_H + NUT_H + st.startFret * ROW_H - NUT_H,
+                    left: sIdx * COL_W + COL_W * 0.2,
+                    width: COL_W * 0.6,
+                    height: NUT_H,
+                    background: c.nut,
+                    borderRadius: 1,
+                  }}
+                />
+              ) : null
+            )}
 
             {/* open row */}
             <div style={{ height: OPEN_H, display: "flex", position: "relative" }}>
-              {strings.map((openNote, sIdx) => {
-                const note = noteAt(openNote, 0);
+              {strings.map((st, sIdx) => {
+                const note = st.note;
                 return (
-                  <div
+                  <button
                     key={sIdx}
-                    style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onClick={() => toggleString(sIdx)}
+                    aria-label={`Highlight string ${strings.length - sIdx} (${note})`}
+                    aria-pressed={selectedStrings.includes(sIdx)}
+                    style={{
+                      width: COL_W,
+                      height: OPEN_H,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
                   >
-                    <NoteCell
-                      note={note}
-                      fret={0}
-                      isOpen
-                      inScaleMap={inScaleMap}
-                      labelMode={labelMode}
-                      scale={scale}
-                      isRoot={NOTES.indexOf(note) === rootIdx}
-                      colors={c}
-                      activeBox={activeBox}
-                      instrumentKey={instrumentKey}
-                    />
-                  </div>
+                    {st.startFret === 0 && (
+                      <NoteCell
+                        note={note}
+                        fret={0}
+                        isOpen
+                        inScaleMap={inScaleMap}
+                        labelMode={labelMode}
+                        scale={scale}
+                        isRoot={NOTES.indexOf(note) === rootIdx}
+                        colors={c}
+                        activeBox={activeBox}
+                        instrumentKey={instrumentKey}
+                      />
+                    )}
+                  </button>
                 );
               })}
             </div>
@@ -592,7 +681,7 @@ export default function Fretwork() {
                     <div
                       style={{
                         position: "absolute",
-                        left: "50%",
+                        left: inlayPos.center,
                         top: "50%",
                         transform: "translate(-50%,-50%)",
                         width: 7,
@@ -607,7 +696,7 @@ export default function Fretwork() {
                       <div
                         style={{
                           position: "absolute",
-                          left: "33%",
+                          left: inlayPos.left,
                           top: "50%",
                           transform: "translate(-50%,-50%)",
                           width: 7,
@@ -619,7 +708,7 @@ export default function Fretwork() {
                       <div
                         style={{
                           position: "absolute",
-                          left: "67%",
+                          left: inlayPos.right,
                           top: "50%",
                           transform: "translate(-50%,-50%)",
                           width: 7,
@@ -630,24 +719,30 @@ export default function Fretwork() {
                       />
                     </>
                   )}
-                  {strings.map((openNote, sIdx) => {
-                    const note = noteAt(openNote, fret);
+                  {strings.map((st, sIdx) => {
+                    // Fret relative to where this string starts (0 = its open note);
+                    // a short string has nothing to show above its start fret.
+                    const localFret = fret - st.startFret;
+                    const note = noteAt(st.note, localFret);
                     return (
                       <div
                         key={sIdx}
                         style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
                       >
-                        <NoteCell
-                          note={note}
-                          fret={fret}
-                          inScaleMap={inScaleMap}
-                          labelMode={labelMode}
-                          scale={scale}
-                          isRoot={NOTES.indexOf(note) === rootIdx}
-                          colors={c}
-                          activeBox={activeBox}
-                          instrumentKey={instrumentKey}
-                        />
+                        {localFret >= 0 && (
+                          <NoteCell
+                            note={note}
+                            fret={fret}
+                            isOpen={localFret === 0}
+                            inScaleMap={inScaleMap}
+                            labelMode={labelMode}
+                            scale={scale}
+                            isRoot={NOTES.indexOf(note) === rootIdx}
+                            colors={c}
+                            activeBox={activeBox}
+                            instrumentKey={instrumentKey}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1109,6 +1204,9 @@ export default function Fretwork() {
 // dash.
 function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
   if (activeBox === null || fret < activeBox.start || fret > activeBox.end) return "–";
+  // Banjo fingering conventions haven't been researched yet (see DECISIONS.md),
+  // so it shows "unknown" rather than borrowing another instrument's rule.
+  if (instrumentKey === "banjo") return "–";
 
   if (instrumentKey === "mandolin") {
     const pitchClass = NOTES.indexOf(note);
@@ -1172,6 +1270,68 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
       }}
     >
       {label}
+    </div>
+  );
+}
+
+// Fret the step-2 ("set its width") tooltip points at: two frets past the
+// anchor, or two before it near the end of the neck so the tooltip stays on it.
+function widthTipFret(anchor, frets) {
+  return anchor + 2 <= frets - 2 ? anchor + 2 : anchor - 2;
+}
+
+function OnboardingTip({ fret, text, colors, checked, onCheck, onDismiss }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 6,
+        top: OPEN_H + NUT_H + (fret - 1) * ROW_H + ROW_H / 2 - 20,
+        width: 190,
+        zIndex: 4,
+        background: colors.panel,
+        border: `1px solid ${colors.panelEdge}`,
+        borderRadius: 10,
+        boxShadow: `0 0 20px 3px ${colors.glow}`,
+        padding: "10px 12px 12px",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: -6,
+          top: 20,
+          width: 11,
+          height: 11,
+          background: colors.panel,
+          borderLeft: `1px solid ${colors.panelEdge}`,
+          borderBottom: `1px solid ${colors.panelEdge}`,
+          transform: "rotate(45deg)",
+        }}
+      />
+      <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.4, marginBottom: 10 }}>{text}</div>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 11,
+          color: colors.muted,
+          marginBottom: 10,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onCheck(e.target.checked)}
+          style={{ accentColor: colors.root }}
+        />
+        Don't show this again
+      </label>
+      <button onClick={onDismiss} style={{ ...pillStyle(true, colors), width: "100%", textAlign: "center" }}>
+        Dismiss
+      </button>
     </div>
   );
 }
