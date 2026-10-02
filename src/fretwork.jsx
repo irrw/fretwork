@@ -277,6 +277,21 @@ export default function Fretwork() {
   const toggleString = (sIdx) =>
     setSelectedStrings((prev) => (prev.includes(sIdx) ? prev.filter((i) => i !== sIdx) : [...prev, sIdx]));
 
+  // Notes outside the focus area fade so it stands out. Open-string notes double
+  // as the string toggles, so they only fade lightly, and only when strings are
+  // selected.
+  // Both ends of a drawn double stop stay at full strength, even when the
+  // partner note sits just outside the box.
+  const noteOpacity = (sIdx, fret, isOpenRow) => {
+    const hasStrings = selectedStrings.length > 0;
+    if (activeBox === null && !hasStrings) return 1;
+    const inStrings = !hasStrings || selectedStrings.includes(sIdx);
+    if (isOpenRow) return inStrings ? 1 : 0.6;
+    const inFrets = activeBox === null || (fret >= activeBox.start && fret <= activeBox.end);
+    if ((inFrets && inStrings) || doubleStopNotes.has(`${sIdx}:${fret}`)) return 1;
+    return 0.3;
+  };
+
   // Diatonic double-stop pairs: adjacent-string note pairs a 3rd or 6th apart,
   // scoped to the focus area (active box rows × selected strings) so the overlay
   // doesn't clutter the whole neck. With no box and no selected strings: none.
@@ -318,6 +333,11 @@ export default function Fretwork() {
     }
     return pairs;
   }, [activeBox, selectedStrings, dsMode, strings, inScaleMap, instrument.frets]);
+
+  const doubleStopNotes = useMemo(
+    () => new Set(doubleStopPairs.flatMap((p) => [`${p.sIdx}:${p.fret}`, `${p.sIdx + 1}:${p.fret2}`])),
+    [doubleStopPairs]
+  );
 
   const dismissFretTip = () => {
     setFretTipDismissed(true);
@@ -369,7 +389,7 @@ export default function Fretwork() {
       }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;700&display=swap');
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: ${theme === "dark" ? "#3a332a" : "#cfc2a4"}; border-radius: 3px; }
@@ -650,6 +670,7 @@ export default function Fretwork() {
                         note={note}
                         fret={0}
                         isOpen
+                        opacity={noteOpacity(sIdx, 0, true)}
                         inScaleMap={inScaleMap}
                         labelMode={labelMode}
                         scale={scale}
@@ -734,6 +755,7 @@ export default function Fretwork() {
                             note={note}
                             fret={fret}
                             isOpen={localFret === 0}
+                            opacity={noteOpacity(sIdx, fret, false)}
                             inScaleMap={inScaleMap}
                             labelMode={labelMode}
                             scale={scale}
@@ -1222,14 +1244,19 @@ function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
   return offset <= 3 ? String(offset + 1) : "–";
 }
 
-function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey }) {
+function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey, opacity = 1 }) {
+  const fade = { opacity, transition: "opacity 0.15s ease" };
+  // A faded token sits on an opaque backing in the page color, so the string
+  // line doesn't show through it — only the token itself fades.
+  const backed = (token, radius) =>
+    opacity < 1 ? <div style={{ background: colors.bg, borderRadius: radius }}>{token}</div> : token;
   const pitchClass = NOTES.indexOf(note);
   const degreeIdx = inScaleMap.get(pitchClass);
   const inScale = degreeIdx !== undefined;
 
   if (!inScale) {
     if (!isOpen) return null;
-    return (
+    return backed(
       <div
         style={{
           fontFamily: "'IBM Plex Mono', monospace",
@@ -1238,10 +1265,12 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
           background: colors.bg,
           padding: "2px 5px",
           borderRadius: 4,
+          ...fade,
         }}
       >
         {note}
-      </div>
+      </div>,
+      4
     );
   }
 
@@ -1252,7 +1281,7 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
     label = isOpen ? "O" : fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey);
   }
 
-  return (
+  return backed(
     <div
       style={{
         width: 27,
@@ -1263,14 +1292,16 @@ function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, co
         justifyContent: "center",
         fontFamily: "'IBM Plex Mono', monospace",
         fontSize: 11,
-        fontWeight: 500,
+        fontWeight: isRoot ? 700 : 500, // bold so the label reads against the brass fill
         background: isRoot ? colors.root : colors.bg,
         color: isRoot ? colors.rootText : colors.toneText,
         border: isRoot ? "none" : `1.5px solid ${colors.toneBorder}`,
+        ...fade,
       }}
     >
       {label}
-    </div>
+    </div>,
+    "50%"
   );
 }
 
