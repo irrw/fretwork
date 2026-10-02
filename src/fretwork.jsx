@@ -277,9 +277,9 @@ export default function Fretwork() {
   const toggleString = (sIdx) =>
     setSelectedStrings((prev) => (prev.includes(sIdx) ? prev.filter((i) => i !== sIdx) : [...prev, sIdx]));
 
-  // Notes outside the focus area fade so it stands out: part way for a fret box
-  // alone, further once strings narrow it down. Open-string notes double as the
-  // string toggles, so they only fade lightly, and only when strings are selected.
+  // Notes outside the focus area fade so it stands out. Open-string notes double
+  // as the string toggles, so they only fade lightly, and only when strings are
+  // selected.
   // Both ends of a drawn double stop stay at full strength, even when the
   // partner note sits just outside the box.
   const noteOpacity = (sIdx, fret, isOpenRow) => {
@@ -289,7 +289,7 @@ export default function Fretwork() {
     if (isOpenRow) return inStrings ? 1 : 0.6;
     const inFrets = activeBox === null || (fret >= activeBox.start && fret <= activeBox.end);
     if ((inFrets && inStrings) || doubleStopNotes.has(`${sIdx}:${fret}`)) return 1;
-    return hasStrings ? 0.3 : 0.5;
+    return 0.3;
   };
 
   // Diatonic double-stop pairs: adjacent-string note pairs a 3rd or 6th apart,
