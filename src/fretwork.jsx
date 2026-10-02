@@ -159,6 +159,7 @@ export default function Fretwork() {
   const [activeBox, setActiveBox] = useState(null); // { start, end } or null
   const [hasUsedBox, setHasUsedBox] = useState(false);
   const [hasSetBoxWidth, setHasSetBoxWidth] = useState(false);
+  const [selectedStrings, setSelectedStrings] = useState([]); // string indices highlighted via the open-string row
   const [dsMode, setDsMode] = useState(savedPrefs.dsMode ?? "off"); // off | third | sixth
   const [hiddenScales, setHiddenScales] = useState(
     savedPrefs.hiddenScales ?? Object.keys(SCALES).filter((s) => !DEFAULT_VISIBLE_SCALES.includes(s))
@@ -193,6 +194,7 @@ export default function Fretwork() {
   useEffect(() => {
     setActiveBox(null);
     setSelectionStart(null);
+    setSelectedStrings([]);
   }, [instrumentKey]);
 
   useEffect(() => {
@@ -270,20 +272,28 @@ export default function Fretwork() {
     }
   };
 
+  // Highlight by string: selected strings narrow the focus area to their columns,
+  // within the active box if there is one, or along the whole neck if not.
+  const toggleString = (sIdx) =>
+    setSelectedStrings((prev) => (prev.includes(sIdx) ? prev.filter((i) => i !== sIdx) : [...prev, sIdx]));
+
   // Diatonic double-stop pairs: adjacent-string note pairs a 3rd or 6th apart,
-  // scoped to the active box so the overlay doesn't clutter the whole neck.
+  // scoped to the focus area (active box rows × selected strings) so the overlay
+  // doesn't clutter the whole neck. With no box and no selected strings: none.
   const doubleStopPairs = useMemo(() => {
-    if (activeBox === null || dsMode === "off") return [];
+    if (dsMode === "off" || (activeBox === null && selectedStrings.length === 0)) return [];
     const offsets = dsMode === "third" ? [4, 3] : [9, 8];
-    const boxEnd = Math.min(instrument.frets, activeBox.end);
+    const rangeStart = activeBox ? activeBox.start : 1;
+    const rangeEnd = activeBox ? Math.min(instrument.frets, activeBox.end) : instrument.frets;
     const pairs = [];
     for (let i = 0; i < strings.length - 1; i++) {
+      if (selectedStrings.length > 0 && !(selectedStrings.includes(i) && selectedStrings.includes(i + 1))) continue;
       // Skip pairs with a short drone string (banjo's 5th): it's a drone, not a
       // double-stop partner, and it doesn't exist below its start fret anyway.
       if (strings[i].startFret > 0 || strings[i + 1].startFret > 0) continue;
       const openA = strings[i].note;
       const openB = strings[i + 1].note;
-      for (let f = activeBox.start; f <= boxEnd; f++) {
+      for (let f = rangeStart; f <= rangeEnd; f++) {
         const pitchA = NOTES.indexOf(noteAt(openA, f));
         if (!inScaleMap.has(pitchA)) continue;
         let targetPitch = null;
@@ -307,7 +317,7 @@ export default function Fretwork() {
       }
     }
     return pairs;
-  }, [activeBox, dsMode, strings, inScaleMap, instrument.frets]);
+  }, [activeBox, selectedStrings, dsMode, strings, inScaleMap, instrument.frets]);
 
   const dismissFretTip = () => {
     setFretTipDismissed(true);
@@ -470,8 +480,8 @@ export default function Fretwork() {
 
           {/* Grid */}
           <div style={{ position: "relative", width: gridW }}>
-            {/* active box highlight band */}
-            {activeBox !== null && (
+            {/* active box highlight band (full width when no strings are selected) */}
+            {activeBox !== null && selectedStrings.length === 0 && (
               <div
                 style={{
                   position: "absolute",
@@ -484,6 +494,37 @@ export default function Fretwork() {
                 }}
               />
             )}
+
+            {/* selected-string bands: the open-string cell marks the selection, and the
+                column is highlighted within the box, or down the whole neck without one */}
+            {selectedStrings.map((sIdx) => (
+              <React.Fragment key={`str-${sIdx}`}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: sIdx * COL_W,
+                    width: COL_W,
+                    top: 0,
+                    height: activeBox ? OPEN_H : totalH,
+                    background: c.band,
+                    pointerEvents: "none",
+                  }}
+                />
+                {activeBox && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: sIdx * COL_W,
+                      width: COL_W,
+                      top: OPEN_H + NUT_H + (activeBox.start - 1) * ROW_H,
+                      height: (activeBox.end - activeBox.start + 1) * ROW_H,
+                      background: c.band,
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            ))}
 
             {/* Two-step onboarding tooltip: step 1 points at FRET_TIP_TARGET ("start a
                 box"); once that first tap drops an anchor, step 2 points at a nearby
@@ -587,9 +628,22 @@ export default function Fretwork() {
               {strings.map((st, sIdx) => {
                 const note = st.note;
                 return (
-                  <div
+                  <button
                     key={sIdx}
-                    style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onClick={() => toggleString(sIdx)}
+                    aria-label={`Highlight string ${strings.length - sIdx} (${note})`}
+                    aria-pressed={selectedStrings.includes(sIdx)}
+                    style={{
+                      width: COL_W,
+                      height: OPEN_H,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
                   >
                     {st.startFret === 0 && (
                       <NoteCell
@@ -605,7 +659,7 @@ export default function Fretwork() {
                         instrumentKey={instrumentKey}
                       />
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
