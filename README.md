@@ -1,18 +1,22 @@
 # Fretwork
 
-A mobile-first scale and fingering visualizer for mandolin, guitar, and ukulele.
+A mobile-first scale and fingering visualizer for mandolin, guitar, ukulele, and 5-string banjo.
 
 ## Features
 
 - Clean, minimal UI focused on the fretboard itself
+- Four instruments with common tunings each, including 5-string banjo with its short 5th (drone) string
 - Responsive fretboard scaling (fills available vertical space on tall/desktop viewports; unchanged on mobile)
 - Customizable scale list (hide/show modes, preview unavailable scales)
 - Box position selection (two-tap anchoring for full width control)
-- Diatonic double-stop overlay (thirds and sixths)
-- Label mode toggle (note names, scale degrees, finger positions)
+- Highlight by string (tap a string's open note to focus it, alone or intersected with a box)
+- Notes outside the focused box/strings fade so the focus area stands out
+- Diatonic double-stop overlay (thirds and sixths) within the focus area
+- Label modes: note names, scale degrees, and finger positions (beta)
 - Dark and light themes
-- Dismissible onboarding tooltip ("don't show this again")
+- Two-step onboarding tooltip for box selection (with "don't show this again")
 - Persistent settings (localStorage)
+- Installable as an app (PWA) with offline support and automatic updates
 
 ## Local development
 
