@@ -1448,3 +1448,20 @@ import { createRoot } from 'react-dom/client';
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(<Fretwork />);
+
+// Service worker: with registerType 'autoUpdate', the page reloads once a new
+// version takes control. Installed apps resumed from the background don't
+// navigate, so also check for updates on return to view and hourly.
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({
+  immediate: true,
+  onRegisteredSW(swUrl, registration) {
+    if (!registration) return;
+    const check = () => navigator.onLine && registration.update();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check();
+    });
+    setInterval(check, 60 * 60 * 1000);
+  },
+});
