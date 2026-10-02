@@ -104,7 +104,7 @@ const THEMES = {
     toneBorder: "#7FA093",
     muted: "#8b8375",
     text: "#EDE6D6",
-    band: "rgba(201,151,59,0.10)",
+    band: "rgba(201,151,59,0.20)", // stronger than light's 0.12: faint tints vanish on near-black screens
     dsLine: "#8C8FC7",
     glow: "rgba(201,151,59,0.45)",
   },

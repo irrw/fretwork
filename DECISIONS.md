@@ -99,6 +99,7 @@ Captured so they don't get lost. None of these are committed to; each needs a de
   - **Tap target**: the open-string cells weren't interactive before, so there's nothing to confuse a string tap with. The banjo's 5th string has no open note at the nut; its empty cell at the top of the column is the toggle.
   - **Persistence**: the selection survives key/scale changes like the box does, clears on instrument change (string count changes), and isn't saved across reloads (the box isn't either).
   - Not done: dimming notes outside the focus area. The band alone matches how the box already works; dimming could be a follow-up if the intersection reads too subtly.
+  - **Band strength:** the dark theme's band was raised from 10% to 20% brass after it read too faintly on a real phone (light mode's 12% was fine). By measured lightness the 10% dark band was already as strong as light's, but on near-black screens the tint carries almost no visible hue and phones flatten near-black shades, so dark needs a stronger value than the numbers suggest. 16% and 24% were also compared; 24% started to look like a brown panel and dulled the root's brass.
 - **Label double-stop connectors with their chord function (idea, needs the theory settled first)**: see the note below — a 3rd/6th dyad is two notes of a triad, so each connector could carry a Roman-numeral label telling the player what chord that double stop implies ("this is a V-chord double stop").
 
 ### Background: what does a double stop "mean" harmonically?
