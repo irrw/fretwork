@@ -135,6 +135,17 @@ const NUT_H = 5;
 const GUTTER_W = 34;
 const FRET_TIP_TARGET = 3; // fret number the "tap a fret" tooltip points at
 
+// Vertical position of a fret row; fret 0 is the open-string row above the nut.
+function rowTop(fret) {
+  return fret === 0 ? 0 : OPEN_H + NUT_H + (fret - 1) * ROW_H;
+}
+function rowBottom(fret) {
+  return fret === 0 ? OPEN_H : OPEN_H + NUT_H + fret * ROW_H;
+}
+function rowCenter(fret) {
+  return fret === 0 ? OPEN_H / 2 : OPEN_H + NUT_H + (fret - 1) * ROW_H + ROW_H / 2;
+}
+
 const PREF_KEY = "fretwork.prefs.v1";
 
 function getSavedPrefs() {
@@ -323,7 +334,7 @@ export default function Fretwork() {
         const targetNote = NOTES[targetPitch];
         for (const delta of [0, 1, -1, 2, -2, 3, -3]) {
           const f2 = f + delta;
-          if (f2 < 1 || f2 > instrument.frets) continue;
+          if (f2 < (rangeStart === 0 ? 0 : 1) || f2 > instrument.frets) continue;
           if (noteAt(openB, f2) === targetNote) {
             pairs.push({ sIdx: i, fret: f, fret2: f2 });
             break;
@@ -420,10 +431,8 @@ export default function Fretwork() {
         >
           {/* Fret number gutter */}
           <div style={{ width: GUTTER_W }}>
-            <div style={{ height: OPEN_H }} />
-            <div style={{ height: NUT_H }} />
-            {Array.from({ length: instrument.frets }).map((_, i) => {
-              const fret = i + 1;
+            {/* Fret 0 selects the open strings, so a box can start at the nut. */}
+            {Array.from({ length: instrument.frets + 1 }).map((_, fret) => {
               const isInlay = instrument.inlays.includes(fret);
               const isSizing = selectionStart !== null;
               const isAnchor = fret === selectionStart;
@@ -466,11 +475,12 @@ export default function Fretwork() {
               }
 
               return (
+                <React.Fragment key={fret}>
                 <button
-                  key={fret}
                   onClick={() => selectFret(fret)}
+                  aria-label={fret === 0 ? "Open strings" : `Fret ${fret}`}
                   style={{
-                    height: ROW_H,
+                    height: fret === 0 ? OPEN_H : ROW_H,
                     width: "100%",
                     display: "flex",
                     alignItems: "center",
@@ -494,6 +504,8 @@ export default function Fretwork() {
                     {fret}
                   </span>
                 </button>
+                {fret === 0 && <div style={{ height: NUT_H }} />}
+                </React.Fragment>
               );
             })}
           </div>
@@ -507,8 +519,8 @@ export default function Fretwork() {
                   position: "absolute",
                   left: 0,
                   width: gridW,
-                  top: OPEN_H + NUT_H + (activeBox.start - 1) * ROW_H,
-                  height: (activeBox.end - activeBox.start + 1) * ROW_H,
+                  top: rowTop(activeBox.start),
+                  height: rowBottom(activeBox.end) - rowTop(activeBox.start),
                   background: c.band,
                   pointerEvents: "none",
                 }}
@@ -519,6 +531,7 @@ export default function Fretwork() {
                 column is highlighted within the box, or down the whole neck without one */}
             {selectedStrings.map((sIdx) => (
               <React.Fragment key={`str-${sIdx}`}>
+                {!(activeBox && activeBox.start === 0) && (
                 <div
                   style={{
                     position: "absolute",
@@ -530,14 +543,15 @@ export default function Fretwork() {
                     pointerEvents: "none",
                   }}
                 />
+                )}
                 {activeBox && (
                   <div
                     style={{
                       position: "absolute",
                       left: sIdx * COL_W,
                       width: COL_W,
-                      top: OPEN_H + NUT_H + (activeBox.start - 1) * ROW_H,
-                      height: (activeBox.end - activeBox.start + 1) * ROW_H,
+                      top: rowTop(activeBox.start),
+                      height: rowBottom(activeBox.end) - rowTop(activeBox.start),
                       background: c.band,
                       pointerEvents: "none",
                     }}
@@ -579,9 +593,9 @@ export default function Fretwork() {
               >
                 {doubleStopPairs.map((p, idx) => {
                   const x1 = p.sIdx * COL_W + COL_W / 2;
-                  const y1 = OPEN_H + NUT_H + (p.fret - 1) * ROW_H + ROW_H / 2;
+                  const y1 = rowCenter(p.fret);
                   const x2 = (p.sIdx + 1) * COL_W + COL_W / 2;
-                  const y2 = OPEN_H + NUT_H + (p.fret2 - 1) * ROW_H + ROW_H / 2;
+                  const y2 = rowCenter(p.fret2);
                   const dx = x2 - x1;
                   const dy = y2 - y1;
                   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -1234,13 +1248,13 @@ function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
     const pitchClass = NOTES.indexOf(note);
     const openPitch = (((pitchClass - fret) % 12) + 12) % 12;
     let rank = 0;
-    for (let f = activeBox.start; f <= fret; f++) {
+    for (let f = Math.max(1, activeBox.start); f <= fret; f++) {
       if (inScaleMap.has((openPitch + f) % 12)) rank++;
     }
     return rank <= 4 ? String(rank) : "–";
   }
 
-  const offset = fret - activeBox.start;
+  const offset = fret - Math.max(1, activeBox.start); // open position: fret 1 is finger 1
   return offset <= 3 ? String(offset + 1) : "–";
 }
 
