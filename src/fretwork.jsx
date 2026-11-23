@@ -241,7 +241,9 @@ export default function Fretwork() {
   }, [instrumentKey, tuningName, root, scaleName, labelMode, theme, hiddenScales, dsMode, dontShowFretTip]);
 
   // Scale the fretboard up to fill available vertical space on tall (desktop) viewports.
-  // Clamped to a 1x floor so mobile keeps its existing scroll-based layout untouched.
+  // Floored at 1x so phones keep their scroll-based layout, except when the neck is
+  // wider than the window (e.g. a 6-string in a narrow iPad Split View): then it
+  // shrinks to fit the width rather than being cut off at the sides.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -250,8 +252,10 @@ export default function Fretwork() {
       const totalHeight = OPEN_H + NUT_H + instrument.frets * ROW_H;
       const availH = el.clientHeight - 14; // minus the container's paddingTop
       const availW = el.clientWidth;
-      const next = Math.min(availH / totalHeight, availW / totalW);
-      setFitScale(Number.isFinite(next) && next > 1 ? next : 1);
+      const fitW = availW / totalW;
+      const next = Math.min(availH / totalHeight, fitW);
+      if (fitW > 0 && fitW < 1) setFitScale(fitW);
+      else setFitScale(Number.isFinite(next) && next > 1 ? next : 1);
     };
     compute();
     const ro = new ResizeObserver(compute);
@@ -427,6 +431,13 @@ export default function Fretwork() {
             display: "flex",
             transform: fitScale !== 1 ? `scale(${fitScale})` : undefined,
             transformOrigin: "top center",
+            // A transform doesn't change layout size, so when shrinking, pull the
+            // margins in to match: no sideways overflow, no empty scroll below.
+            ...(fitScale < 1 && {
+              marginLeft: ((fitScale - 1) * (strings.length * COL_W + GUTTER_W)) / 2,
+              marginRight: ((fitScale - 1) * (strings.length * COL_W + GUTTER_W)) / 2,
+              marginBottom: (fitScale - 1) * totalH,
+            }),
           }}
         >
           {/* Fret number gutter */}
