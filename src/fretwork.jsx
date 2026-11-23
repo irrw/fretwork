@@ -524,6 +524,26 @@ export default function Fretwork() {
     setPlaying(true);
   };
 
+  // Tap a note on the neck to hear it (while the scale loop is on).
+  const openMidiFor = (sIdx) => {
+    const octs = TUNING_OCTAVES[instrumentKey];
+    const oct = (octs[tuningName] || octs.default)[sIdx];
+    return 12 * (oct + 1) + NOTES.indexOf(strings[sIdx].note);
+  };
+  const tapNote = (sIdx, fret) => {
+    if (!loopOn) return;
+    const e = engine.current;
+    if (!e.ctx) e.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    e.ctx.resume();
+    playPluck(e.ctx, openMidiFor(sIdx) + (fret - strings[sIdx].startFret), e.ctx.currentTime + 0.01);
+    if (!playing) {
+      const key = `${sIdx}:${fret}`;
+      setPlayingKey(key);
+      clearTimeout(e.tapFlash);
+      e.tapFlash = setTimeout(() => setPlayingKey((k) => (k === key ? null : k)), 250);
+    }
+  };
+
   const tapTempo = () => {
     const e = engine.current;
     const now = performance.now();
@@ -852,7 +872,10 @@ export default function Fretwork() {
                 return (
                   <button
                     key={sIdx}
-                    onClick={() => toggleString(sIdx)}
+                    onClick={() => {
+                      toggleString(sIdx);
+                      if (st.startFret === 0) tapNote(sIdx, 0);
+                    }}
                     aria-label={`Highlight string ${strings.length - sIdx} (${note})`}
                     aria-pressed={selectedStrings.includes(sIdx)}
                     style={{
@@ -951,7 +974,8 @@ export default function Fretwork() {
                     return (
                       <div
                         key={sIdx}
-                        style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onClick={localFret >= 0 && (inScaleMap.has(NOTES.indexOf(note)) || localFret === 0) ? () => tapNote(sIdx, fret) : undefined}
+                        style={{ width: COL_W, display: "flex", alignItems: "center", justifyContent: "center", cursor: loopOn ? "pointer" : undefined }}
                       >
                         {localFret >= 0 && (
                           <NoteCell
