@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal, Music2, Ruler } from "lucide-react";
+import { Sun, Moon, Pencil, Check, Minus, Plus, Fingerprint, MoreHorizontal, Music2, Ruler, Play, Square, SlidersHorizontal, X } from "lucide-react";
 import logoMarkUrl from "./assets/icons/fretwork-icon/fretwork-mark.svg";
 
 // ---------- Music data ----------
@@ -79,7 +79,84 @@ const INSTRUMENTS = {
   },
 };
 
-const DEFAULT_VISIBLE_SCALES = ["Major", "Dorian", "Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Mixolydian"];
+// ---------- PROTOTYPE: scale loop (throwaway, for a user interview) ----------
+// Octave of each open string, low -> high, so the loop can play real pitches.
+// The production data model has pitch classes only; see DECISIONS.md.
+const TUNING_OCTAVES = {
+  guitar: { default: [2, 2, 3, 3, 3, 4] },
+  mandolin: { default: [3, 4, 4, 5] },
+  ukulele: { default: [4, 4, 4, 4], "Baritone (DGBE)": [3, 3, 3, 4] }, // standard is re-entrant (G4 C4 E4 A4)
+  banjo: { default: [4, 3, 3, 3, 4], "Double C (gCGCD)": [4, 3, 3, 4, 4], "Sawmill (gDGCD)": [4, 3, 3, 4, 4] },
+};
+const TIME_SIGS = [
+  { key: "2/4", label: "2/4", beats: 2 },
+  { key: "3/4", label: "3/4", beats: 3 },
+  { key: "4/4", label: "4/4", beats: 4 },
+  { key: "6/8", label: "6/8", beats: 6 },
+];
+const SUBDIVS = [
+  { key: 1, label: "♩ 1/beat" },
+  { key: 2, label: "♫ 2/beat" },
+  { key: 3, label: "3 (triplets)" },
+  { key: 4, label: "4 (16ths)" },
+];
+const DIRECTIONS = [
+  { key: "up", label: "Up" },
+  { key: "down", label: "Down" },
+  { key: "updown", label: "Up & down" },
+];
+
+function loopOrder(n, direction) {
+  const up = Array.from({ length: n }, (_, i) => i);
+  if (direction === "down") return up.reverse();
+  if (direction === "updown") return n > 1 ? [...up, ...up.slice(1, -1).reverse()] : up;
+  return up;
+}
+
+// Karplus-Strong plucked string, rendered once per pitch and cached.
+const pluckCache = new Map();
+function pluckBuffer(ctx, midi) {
+  if (pluckCache.has(midi)) return pluckCache.get(midi);
+  const sr = ctx.sampleRate;
+  const freq = 440 * Math.pow(2, (midi - 69) / 12);
+  const len = Math.floor(sr * 1.5);
+  const buf = ctx.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  const N = Math.max(2, Math.round(sr / freq));
+  const ring = new Float32Array(N);
+  for (let i = 0; i < N; i++) ring[i] = Math.random() * 2 - 1;
+  let idx = 0;
+  for (let i = 0; i < len; i++) {
+    const a = ring[idx];
+    const b = ring[(idx + 1) % N];
+    d[i] = a;
+    ring[idx] = ((a + b) / 2) * 0.997;
+    idx = (idx + 1) % N;
+  }
+  pluckCache.set(midi, buf);
+  return buf;
+}
+function playPluck(ctx, midi, time) {
+  const src = ctx.createBufferSource();
+  src.buffer = pluckBuffer(ctx, midi);
+  const g = ctx.createGain();
+  g.gain.value = 0.5;
+  src.connect(g).connect(ctx.destination);
+  src.start(time);
+}
+function playClick(ctx, time, accent) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.frequency.value = accent ? 1600 : 1000;
+  g.gain.setValueAtTime(accent ? 0.35 : 0.2, time);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.05);
+}
+// ---------- end PROTOTYPE data ----------
+
+const DEFAULT_VISIBLE_SCALES =["Major", "Dorian", "Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Mixolydian"];
 // (box width is now user-chosen, see selectionStart/activeBox below)
 
 // ---------- Helpers ----------
@@ -338,6 +415,131 @@ export default function Fretwork() {
     () => new Set(doubleStopPairs.flatMap((p) => [`${p.sIdx}:${p.fret}`, `${p.sIdx + 1}:${p.fret2}`])),
     [doubleStopPairs]
   );
+
+  // ---------- PROTOTYPE: scale loop ----------
+  // The notes in the focus area (fret box × selected strings), each pitch once
+  // (on the lowest string that has it), low to high.
+  const loopSequence = useMemo(() => {
+    if (activeBox === null && selectedStrings.length === 0) return [];
+    const octs = TUNING_OCTAVES[instrumentKey];
+    const oct = octs[tuningName] || octs.default;
+    const fStart = activeBox ? activeBox.start : 0;
+    const fEnd = activeBox ? activeBox.end : instrument.frets;
+    const byMidi = new Map();
+    strings.forEach((st, sIdx) => {
+      if (selectedStrings.length > 0 && !selectedStrings.includes(sIdx)) return;
+      const openMidi = 12 * (oct[sIdx] + 1) + NOTES.indexOf(st.note);
+      for (let f = Math.max(fStart, st.startFret); f <= fEnd; f++) {
+        const midi = openMidi + (f - st.startFret);
+        if (!inScaleMap.has(midi % 12) || byMidi.has(midi)) continue;
+        byMidi.set(midi, { sIdx, fret: f, midi });
+      }
+    });
+    return [...byMidi.values()].sort((a, b) => a.midi - b.midi);
+  }, [activeBox, selectedStrings, strings, inScaleMap, instrumentKey, tuningName, instrument.frets]);
+
+  const [loopOn, setLoopOn] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [bpm, setBpm] = useState(80);
+  const [beatsPerBar, setBeatsPerBar] = useState(4);
+  const [subdiv, setSubdiv] = useState(2);
+  const [direction, setDirection] = useState("updown");
+  const [clickOn, setClickOn] = useState(true);
+  const [countIn, setCountIn] = useState(true);
+  const [trainer, setTrainer] = useState(false);
+  const [playingKey, setPlayingKey] = useState(null);
+  const [beatNow, setBeatNow] = useState(-1);
+  const [loopCount, setLoopCount] = useState(0);
+  const engine = useRef({ ctx: null, timer: null, raf: null, queue: [], wake: null, taps: [] });
+  const live = useRef({});
+  live.current = { seq: loopSequence, bpm, beatsPerBar, subdiv, direction, clickOn, trainer };
+
+  const stopLoop = () => {
+    const e = engine.current;
+    clearInterval(e.timer);
+    cancelAnimationFrame(e.raf);
+    e.timer = null;
+    e.queue = [];
+    e.wake?.release?.().catch(() => {});
+    e.wake = null;
+    setPlaying(false);
+    setPlayingKey(null);
+    setBeatNow(-1);
+  };
+
+  const startLoop = () => {
+    const e = engine.current;
+    if (!e.ctx) e.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = e.ctx;
+    ctx.resume();
+    navigator.wakeLock?.request("screen").then((w) => (e.wake = w)).catch(() => {});
+    const L0 = live.current;
+    const st = { next: ctx.currentTime + 0.1, tick: 0, step: 0, countLeft: countIn ? L0.beatsPerBar * L0.subdiv : 0, loops: 0 };
+    setLoopCount(0);
+    const schedule = () => {
+      while (st.next < ctx.currentTime + 0.12) {
+        const L = live.current;
+        const tickDur = 60 / L.bpm / L.subdiv;
+        const isBeat = st.tick % L.subdiv === 0;
+        const beatIdx = Math.floor(st.tick / L.subdiv) % L.beatsPerBar;
+        const counting = st.countLeft > 0;
+        if (isBeat && (L.clickOn || counting)) playClick(ctx, st.next, beatIdx === 0);
+        let key = null;
+        if (counting) {
+          st.countLeft--;
+        } else if (L.seq.length > 0) {
+          const order = loopOrder(L.seq.length, L.direction);
+          const pos = order[st.step % order.length];
+          const n = L.seq[pos];
+          if (n) {
+            playPluck(ctx, n.midi, st.next);
+            key = `${n.sIdx}:${n.fret}`;
+          }
+          st.step++;
+          if (st.step % order.length === 0) {
+            st.loops++;
+            const loops = st.loops;
+            setLoopCount(loops);
+            if (L.trainer && loops % 2 === 0) setBpm((b) => Math.min(300, b + 5));
+          }
+        }
+        e.queue.push({ time: st.next, key, beat: isBeat ? beatIdx : null, counting });
+        st.next += tickDur;
+        st.tick++;
+      }
+    };
+    schedule();
+    e.timer = setInterval(schedule, 25);
+    const draw = () => {
+      const now = ctx.currentTime;
+      let last = null;
+      while (e.queue.length && e.queue[0].time <= now) last = e.queue.shift();
+      if (last) {
+        setPlayingKey(last.key);
+        if (last.beat !== null) setBeatNow(last.counting ? -2 - last.beat : last.beat);
+      }
+      e.raf = requestAnimationFrame(draw);
+    };
+    e.raf = requestAnimationFrame(draw);
+    setPlaying(true);
+  };
+
+  const tapTempo = () => {
+    const e = engine.current;
+    const now = performance.now();
+    e.taps = [...e.taps.filter((t) => now - t < 2500), now].slice(-5);
+    if (e.taps.length >= 2) {
+      const gaps = e.taps.slice(1).map((t, i) => t - e.taps[i]);
+      const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      setBpm(Math.max(30, Math.min(300, Math.round(60000 / avg))));
+    }
+  };
+
+  useEffect(() => () => stopLoop(), []);
+  useEffect(() => {
+    if (!loopOn) stopLoop();
+  }, [loopOn]);
+  // ---------- end PROTOTYPE ----------
 
   const dismissFretTip = () => {
     setFretTipDismissed(true);
@@ -671,6 +873,7 @@ export default function Fretwork() {
                         fret={0}
                         isOpen
                         opacity={noteOpacity(sIdx, 0, true)}
+                        playing={playingKey === `${sIdx}:0`}
                         inScaleMap={inScaleMap}
                         labelMode={labelMode}
                         scale={scale}
@@ -756,6 +959,7 @@ export default function Fretwork() {
                             fret={fret}
                             isOpen={localFret === 0}
                             opacity={noteOpacity(sIdx, fret, false)}
+                            playing={playingKey === `${sIdx}:${fret}`}
                             inScaleMap={inScaleMap}
                             labelMode={labelMode}
                             scale={scale}
@@ -982,6 +1186,29 @@ export default function Fretwork() {
             </div>
           )}
 
+          {panel === "loop" && (
+            <div>
+              <SectionLabel colors={c}>TIME SIGNATURE</SectionLabel>
+              <OptionGrid options={TIME_SIGS} current={TIME_SIGS.find((t) => t.beats === beatsPerBar)?.key}
+                onSelect={(k) => setBeatsPerBar(TIME_SIGS.find((t) => t.key === k).beats)} colors={c} />
+              <SectionLabel colors={c} top>NOTES PER BEAT</SectionLabel>
+              <OptionGrid options={SUBDIVS} current={subdiv} onSelect={setSubdiv} colors={c} />
+              <SectionLabel colors={c} top>DIRECTION</SectionLabel>
+              <OptionGrid options={DIRECTIONS} current={direction} onSelect={setDirection} colors={c} />
+              <SectionLabel colors={c} top>OPTIONS</SectionLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button onClick={() => setClickOn((v) => !v)} style={pillStyle(clickOn, c)}>Click</button>
+                <button onClick={() => setCountIn((v) => !v)} style={pillStyle(countIn, c)}>1-bar count-in</button>
+                <button onClick={() => setTrainer((v) => !v)} style={pillStyle(trainer, c)}>Speed trainer: +5 BPM every 2 loops</button>
+              </div>
+              <div style={{ marginTop: 14, fontSize: 11, color: c.muted, fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6 }}>
+                {loopSequence.length > 0
+                  ? `${loopSequence.length} notes: ` + loopSequence.map((n) => NOTES[n.midi % 12] + (Math.floor(n.midi / 12) - 1)).join(" ")
+                  : "No notes yet: tap two fret numbers to make a box."}
+              </div>
+            </div>
+          )}
+
           {panel === "labels" && (
             <div>
               <div
@@ -1100,6 +1327,16 @@ export default function Fretwork() {
                 EXPERIMENTAL
               </div>
               <button
+                onClick={() => {
+                  setLoopOn((v) => !v);
+                  setPanel(null);
+                }}
+                style={{ ...pillStyle(loopOn, c), display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}
+              >
+                <Play size={14} />
+                Scale loop (prototype)
+              </button>
+              <button
                 onClick={() => setLabelMode((m) => (m === "finger" ? "note" : "finger"))}
                 style={{
                   display: "flex",
@@ -1120,6 +1357,45 @@ export default function Fretwork() {
             </div>
           )}
         </div>
+        </div>
+      )}
+
+      {/* PROTOTYPE: scale loop transport */}
+      {loopOn && (
+        <div style={{ display: "flex", justifyContent: "center", padding: "8px 12px", borderTop: `1px solid ${c.panelEdge}`, background: c.panel, position: "relative", zIndex: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", maxWidth: 480 }}>
+            <button
+              onClick={() => (playing ? stopLoop() : startLoop())}
+              disabled={!playing && loopSequence.length === 0}
+              aria-label={playing ? "Stop" : "Play"}
+              style={{ ...roundBtn(c, true), width: 40, height: 40, opacity: !playing && loopSequence.length === 0 ? 0.4 : 1 }}
+            >
+              {playing ? <Square size={16} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+            </button>
+            <button onClick={() => setBpm((b) => Math.max(30, b - 5))} aria-label="Slower" style={roundBtn(c)}><Minus size={14} /></button>
+            <div style={{ textAlign: "center", minWidth: 44, fontFamily: "'IBM Plex Mono', monospace" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: c.text, lineHeight: 1 }}>{bpm}</div>
+              <div style={{ fontSize: 9, color: c.muted, letterSpacing: "0.08em" }}>BPM</div>
+            </div>
+            <button onClick={() => setBpm((b) => Math.min(300, b + 5))} aria-label="Faster" style={roundBtn(c)}><Plus size={14} /></button>
+            <button onClick={tapTempo} style={{ ...pillStyle(false, c), padding: "6px 10px", fontSize: 12 }}>Tap</button>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 4 }}>
+                {Array.from({ length: beatsPerBar }).map((_, i) => {
+                  const counting = beatNow <= -2;
+                  const on = counting ? -2 - beatNow === i : beatNow === i;
+                  return <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: on ? (counting ? c.toneBorder : c.root) : c.panelEdge }} />;
+                })}
+              </div>
+              <div style={{ fontSize: 9, color: c.muted, fontFamily: "'IBM Plex Mono', monospace", whiteSpace: "nowrap" }}>
+                {loopSequence.length === 0 ? "make a fret box" : beatNow <= -2 ? "count-in" : `${TIME_SIGS.find((t) => t.beats === beatsPerBar).key} · loop ${loopCount}`}
+              </div>
+            </div>
+            <button onClick={() => togglePanel("loop")} aria-label="Loop settings" style={{ ...roundBtn(c), borderColor: panel === "loop" ? c.root : c.panelEdge, color: panel === "loop" ? c.root : c.text }}>
+              <SlidersHorizontal size={14} />
+            </button>
+            <button onClick={() => setLoopOn(false)} aria-label="Close scale loop" style={roundBtn(c)}><X size={14} /></button>
+          </div>
         </div>
       )}
 
@@ -1244,12 +1520,15 @@ function fingerLabel(note, fret, activeBox, inScaleMap, instrumentKey) {
   return offset <= 3 ? String(offset + 1) : "–";
 }
 
-function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey, opacity = 1 }) {
-  const fade = { opacity, transition: "opacity 0.15s ease" };
+function NoteCell({ note, fret, inScaleMap, labelMode, scale, isRoot, isOpen, colors, activeBox, instrumentKey, opacity = 1, playing = false }) {
+  // PROTOTYPE: the note the scale loop is sounding right now pops and glows.
+  const fade = playing
+    ? { opacity: 1, transform: "scale(1.3)", boxShadow: `0 0 0 3px ${colors.root}, 0 0 16px 4px ${colors.glow}`, transition: "transform 0.05s ease" }
+    : { opacity, transition: "opacity 0.15s ease, transform 0.15s ease" };
   // A faded token sits on an opaque backing in the page color, so the string
   // line doesn't show through it — only the token itself fades.
   const backed = (token, radius) =>
-    opacity < 1 ? <div style={{ background: colors.bg, borderRadius: radius }}>{token}</div> : token;
+    opacity < 1 && !playing ? <div style={{ background: colors.bg, borderRadius: radius }}>{token}</div> : token;
   const pitchClass = NOTES.indexOf(note);
   const degreeIdx = inScaleMap.get(pitchClass);
   const inScale = degreeIdx !== undefined;
@@ -1365,6 +1644,23 @@ function OnboardingTip({ fret, text, colors, checked, onCheck, onDismiss }) {
       </button>
     </div>
   );
+}
+
+// PROTOTYPE helpers
+function SectionLabel({ children, colors, top }) {
+  return (
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.08em", color: colors.muted, margin: top ? "14px 0 8px" : "0 0 8px" }}>
+      {children}
+    </div>
+  );
+}
+function roundBtn(colors, accent) {
+  return {
+    flexShrink: 0, width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+    border: `1px solid ${accent ? colors.root : colors.panelEdge}`,
+    background: accent ? colors.root : "transparent",
+    color: accent ? colors.rootText : colors.text,
+  };
 }
 
 function OptionGrid({ options, current, onSelect, colors }) {
